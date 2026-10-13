@@ -301,7 +301,7 @@ namespace OmenSuperHub {
 
         // Main loop to query CPU and GPU temperature every second
         fanControlTimer = new System.Threading.Timer((e) => {
-          if (fanControl != "auto") return;
+          if (fanCalibrating || fanControl != "auto") return;
           int fanSpeed = GetFanSpeedForTemperature() / 100;
           if (fanSpeed < 0) return;
           int s0, s1;
@@ -541,6 +541,10 @@ namespace OmenSuperHub {
       //Console.Error.WriteLine("CRASH: " + $"3: {sw.ElapsedMilliseconds}ms");
       int sleepMs = 1000;
 
+      // 实际生效的 CPU 功耗限制（MSR），以 "INFO:" 行告知父进程初始化结果
+      MsrPowerReader msrReader = MsrPowerReader.TryCreate(out string msrError);
+      Console.WriteLine(msrReader != null ? "INFO: MSR guc limiti okuyucu hazir" : $"INFO: MSR guc limiti okunamiyor ({msrError})");
+
       var readThread = new Thread(() => {
         while (true) {
           string line = Console.ReadLine();
@@ -648,9 +652,10 @@ namespace OmenSuperHub {
               } catch { }
             }
           }
-          // 字段 7-9：eGPU 温度、功率、是否存在
-          Console.WriteLine(string.Format(CultureInfo.InvariantCulture, "{0:F2};{1:F2};{2:F2};{3:F2};{4};{5:F2};{6:F2};{7:F2};{8:F2};{9}",
-              tCpu, pCpu, tGpu, pGpu, gGpu ? 1 : 0, fCpu, fGpu, tExtGpu, pExtGpu, hasExtGpu ? 1 : 0));
+          // 字段 7-9：eGPU 温度、功率、是否存在；字段 10-14：MSR PL1、PL2、锁定、温度墙、功耗墙
+          string msrFields = (msrReader != null ? msrReader.ReadField() : null) ?? MsrFieldsUnavailable;
+          Console.WriteLine(string.Format(CultureInfo.InvariantCulture, "{0:F2};{1:F2};{2:F2};{3:F2};{4};{5:F2};{6:F2};{7:F2};{8:F2};{9};{10}",
+              tCpu, pCpu, tGpu, pGpu, gGpu ? 1 : 0, fCpu, fGpu, tExtGpu, pExtGpu, hasExtGpu ? 1 : 0, msrFields));
         } catch (Exception ex) {
           Console.Error.WriteLine("CRASH: " + ex.Message);
           Environment.Exit(1);
@@ -696,8 +701,12 @@ namespace OmenSuperHub {
         if (string.IsNullOrEmpty(e.Data)) return;
         //Debug.WriteLine("[HWMonitor OUT] " + e.Data); // 将子进程输出重定向到VS的输出窗口
         if (e.Data.StartsWith("CRASH:")) return;
+        if (e.Data.StartsWith("INFO:")) {
+          Logger.Info("HWMonitor:" + e.Data.Substring(5));
+          return;
+        }
         var parts = e.Data.Split(';');
-        if (parts.Length == 5 || parts.Length == 7 || parts.Length == 10) {
+        if (parts.Length == 5 || parts.Length == 7 || parts.Length == 10 || parts.Length == 15) {
           if (float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float tc)) rawTempCPU = tc;
           if (float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float pc) && pc < 9999) rawPowerCPU = pc;
           if (float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float tg)) rawTempGPU = tg;
@@ -720,6 +729,7 @@ namespace OmenSuperHub {
           } else {
             hasEGPU = false;
           }
+          if (parts.Length >= 15) OnMsrPowerFields(parts, 10);
           // 首次收到数据时，初始化对应传感器的平滑温度
           if (!cpuTempReady) {
             smoothedCPUTemp = rawTempCPU;
@@ -809,8 +819,11 @@ namespace OmenSuperHub {
 
     static int flagStart = 0;
     static void optimiseSchedule() {
+      // 启动时及之后每 30 秒检查一次冲突软件
+      CheckConflicts();
+
       // 延时等待风扇恢复响应
-      if (flagStart < 5) {
+      if (flagStart < 5 && !fanCalibrating) {
         flagStart++;
         if (fanControl.Contains("max")) {
           ApplyMaxFan();
@@ -1248,7 +1261,7 @@ namespace OmenSuperHub {
         GPUTemp = (tempDisplayMode == "raw") ? rawTempGPU : smoothedGPUTemp;
 
       int currentMaxCPUTemp = maxCPUTemp ?? 97;
-      if (autoFanProtect == "on" && platformMaxFanSpeed.HasValue && (monitorCPU || monitorGPU) && smoothedCPUTemp > currentMaxCPUTemp - 2 && fanControl.Contains(" RPM")) {
+      if (!fanCalibrating && autoFanProtect == "on" && platformMaxFanSpeed.HasValue && (monitorCPU || monitorGPU) && smoothedCPUTemp > currentMaxCPUTemp - 2 && fanControl.Contains(" RPM")) {
         // 检查是否满足转速低于平台最大转速80%的条件
         bool fanSpeedCondition = true;
         if (platformMaxFanSpeed.Value > 0) {
@@ -1449,7 +1462,7 @@ namespace OmenSuperHub {
           if (showCPUTemp && cpuTempReady) cpuParts.Add($"{CPUTemp:F1}°C");
           if (showCPUPower && CPUPower > 0) cpuParts.Add($"{CPUPower:F1}W");
           if (showCPUFrequency && CPUFrequency > 0) cpuParts.Add($"{CPUFrequency / 1000f:F1}GHz");
-          if (cpuParts.Count > 0) str += $"CPU: {string.Join(", ", cpuParts)}";
+          if (cpuParts.Count > 0) str += $"CPU: {string.Join(", ", cpuParts)}{ThrottleSuffix()}";
           else if (pawnIOState == "RUNNING") str += $"CPU: {Strings.MonitorPrepareLabel}";
         } else {
           if (pawnIOState == "RUNNING")

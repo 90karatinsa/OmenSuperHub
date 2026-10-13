@@ -471,7 +471,10 @@ namespace OmenSuperHub {
       if (fanSliderMaxRpmOverride < 0)
         fanSliderMaxRpmOverride = ReadIntOverride("FanSliderMaxRpm");
 
-      int autoMax = platformMaxFanSpeed > 0 ? (int)(platformMaxFanSpeed.Value * 1.4) : 6400;
+      // 优先使用风扇校准的实测值（+10%，留给 EC 在高负载下自行提升的余量），否则按平台值估算
+      int calibrated = GetCalibratedMaxRpm();
+      int autoMax = calibrated > 0 ? (int)(Math.Ceiling(calibrated * 1.1 / 100.0) * 100)
+                  : platformMaxFanSpeed > 0 ? (int)(platformMaxFanSpeed.Value * 1.4) : 6400;
       int result = fanSliderMaxRpmOverride > 0 ? fanSliderMaxRpmOverride : autoMax;
       return Math.Min(MaxSafeFanLevel * 100, Math.Max(1000, result / 100 * 100));
     }
@@ -1228,17 +1231,20 @@ namespace OmenSuperHub {
           gpuMemoryOverclockValueLabel.Text = string.Format(Strings.CurrentSliderValueTemp, $"{memIndex * 100} MHz");
         }
 
+        // 上次关机异常时本次开机不应用 GPU 超频（保存的设置不变，拖动滑块即可重新应用）
+        bool skipGpuOc = ShouldSkipGpuOc();
+
         if (gpuCoreOverclock < 0) {
           UpdateCheckedState("gpuCoreOverclockGroup", Strings.NotSet);
         } else {
-          System.Threading.Tasks.Task.Run(() => SetCoreClockOffset(gpuCoreOverclock));
+          if (!skipGpuOc) System.Threading.Tasks.Task.Run(() => SetCoreClockOffset(gpuCoreOverclock));
           UpdateCheckedState("gpuCoreOverclockGroup", Strings.SetGpuCoreOverclockSlider);
         }
 
         if (gpuMemoryOverclock < 0) {
           UpdateCheckedState("gpuMemoryOverclockGroup", Strings.NotSet);
         } else {
-          System.Threading.Tasks.Task.Run(() => SetMemoryClockOffset(gpuMemoryOverclock));
+          if (!skipGpuOc) System.Threading.Tasks.Task.Run(() => SetMemoryClockOffset(gpuMemoryOverclock));
           UpdateCheckedState("gpuMemoryOverclockGroup", Strings.SetGpuMemoryOverclockSlider);
         }
 

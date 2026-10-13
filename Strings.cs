@@ -630,6 +630,70 @@
     public static string Browse => T("浏览...", "瀏覽...", "Browse...", "Gözat...");
 
     // ─────────────────────────────────────────────────────────────────────────
+    // 实际生效的 CPU 功耗限制（MSR 0x610）与降频状态
+    // ─────────────────────────────────────────────────────────────────────────
+    public static string SysCpuPowerLimit => T("CPU 功耗限制 (MSR)", "CPU 功耗限制 (MSR)", "CPU power limit (MSR)", "CPU güç limiti (MSR)");
+    public static string CpuPowerApplied(string text) => T(
+        $"实际生效 (MSR): {text}", $"實際生效 (MSR): {text}", $"Actually applied (MSR): {text}", $"Gerçekte uygulanan (MSR): {text}");
+    public static string PlLocked => T("已锁定", "已鎖定", "locked", "kilitli");
+    public static string MsrUnavailable => T("无法读取", "無法讀取", "unavailable", "okunamadı");
+    public static string SysThrottle => T("降频状态", "降頻狀態", "Throttling", "Kısılma");
+    public static string ThrottleThermal => T("温度墙", "溫度牆", "thermal limit", "ısı limiti");
+    public static string ThrottlePower => T("功耗墙", "功耗牆", "power limit", "güç limiti");
+    public static string PlOverrideTitle => T(
+        "CPU 功耗限制被外部修改", "CPU 功耗限制被外部修改", "CPU power limit changed externally", "CPU güç limiti dışarıdan değiştirildi");
+    public static string PlOverrideText(int set, float pl1) => T(
+        $"设置为 {set} W，但 CPU 实际 PL1 为 {pl1:F0} W。可能有其他软件（如 OGH、XTU）覆盖了设置。",
+        $"設定為 {set} W，但 CPU 實際 PL1 為 {pl1:F0} W。可能有其他軟體（如 OGH、XTU）覆寫了設定。",
+        $"Set to {set} W, but the CPU's actual PL1 is {pl1:F0} W. Another program (e.g. OGH, XTU) may have overridden it.",
+        $"Ayar {set} W, ama CPU'nun gerçek PL1 değeri {pl1:F0} W. Başka bir program (ör. OGH, XTU) ayarın üzerine yazmış olabilir.");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 冲突软件检测
+    // ─────────────────────────────────────────────────────────────────────────
+    public static string SysConflicts => T("冲突软件", "衝突軟體", "Conflicting software", "Çakışan yazılım");
+    public static string ConflictTitle => T("检测到冲突软件", "偵測到衝突軟體", "Conflicting software detected", "Çakışan yazılım algılandı");
+    public static string ConflictText(string list) => T(
+        $"{list} 正在运行，可能覆盖 OSH 的风扇或功耗设置。",
+        $"{list} 正在執行，可能覆寫 OSH 的風扇或功耗設定。",
+        $"{list} is running and may override OSH's fan or power settings.",
+        $"{list} çalışıyor; OSH'nin fan veya güç ayarlarının üzerine yazabilir.");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 异常关机后的 GPU 超频保护
+    // ─────────────────────────────────────────────────────────────────────────
+    public static string SysLastShutdown => T("上次关机", "上次關機", "Last shutdown", "Son kapanış");
+    public static string ShutdownClean => T("正常", "正常", "clean", "temiz");
+    public static string ShutdownUnclean => T("异常", "異常", "unexpected", "beklenmedik");
+    public static string GpuOcSkippedTitle => T("已跳过 GPU 超频", "已略過 GPU 超頻", "GPU overclock skipped", "GPU hız aşırtma atlandı");
+    public static string GpuOcSkippedText => T(
+        "上次关机异常（崩溃或断电）。为安全起见，本次开机未应用 GPU 超频。拖动超频滑块即可重新应用。",
+        "上次關機異常（當機或斷電）。為安全起見，本次開機未套用 GPU 超頻。拖曳超頻滑桿即可重新套用。",
+        "The last shutdown was unexpected (crash or power loss). For safety, GPU overclock was not applied this boot. Move an overclock slider to re-apply it.",
+        "Son kapanış beklenmedikti (çökme veya güç kesintisi). Güvenlik için GPU hız aşırtması bu açılışta uygulanmadı. Yeniden uygulamak için hız aşırtma kaydırıcısını oynatman yeterli.");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 风扇校准
+    // ─────────────────────────────────────────────────────────────────────────
+    public static string FanCalibrateMenu => T("风扇校准…", "風扇校準…", "Fan Calibration…", "Fan Kalibrasyonu…");
+    public static string FanCalibrateTitle => T("风扇校准", "風扇校準", "Fan Calibration", "Fan Kalibrasyonu");
+    public static string FanCalibrateConfirm => T(
+        "为测量风扇实际最高转速，所有风扇将以最高转速运行最多 45 秒，期间会很吵。是否开始？",
+        "為測量風扇實際最高轉速，所有風扇將以最高轉速運轉最多 45 秒，期間會很吵。是否開始？",
+        "To measure their real top speed, all fans will run at maximum for up to 45 seconds. It will be loud. Start?",
+        "Gerçek tavan devirlerini ölçmek için tüm fanlar en fazla 45 saniye boyunca en yüksek hızda çalışacak. Gürültülü olacak. Başlatılsın mı?");
+    public static string FanCalibrating => T("风扇校准中…", "風扇校準中…", "Calibrating fans…", "Fanlar kalibre ediliyor…");
+    public static string FanCalibrateDone(string fans, int ceiling) => T(
+        $"测量完成：{fans}。转速滑块上限已设为 {ceiling} RPM。",
+        $"測量完成：{fans}。轉速滑桿上限已設為 {ceiling} RPM。",
+        $"Measured: {fans}. Fan speed slider ceiling set to {ceiling} RPM.",
+        $"Ölçüm tamamlandı: {fans}. Devir kaydırıcısının tavanı {ceiling} RPM olarak ayarlandı.");
+    public static string FanCalibrateFailed => T(
+        "校准失败：未能读取风扇转速。", "校準失敗：無法讀取風扇轉速。", "Calibration failed: fan speed could not be read.", "Kalibrasyon başarısız: fan devri okunamadı.");
+    public static string FanCalibratedInfo(string fans, string date) => T(
+        $"实测最高转速: {fans} ({date})", $"實測最高轉速: {fans} ({date})", $"Measured max: {fans} ({date})", $"Ölçülen tavan: {fans} ({date})");
+
+    // ─────────────────────────────────────────────────────────────────────────
     // 错误/警告对话框
     // ─────────────────────────────────────────────────────────────────────────
     // ─────────────────────────────────────────────────────────────────────────

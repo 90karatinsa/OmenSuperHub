@@ -128,6 +128,25 @@ namespace OmenSuperHub {
       adapterPowerMenu = new ToolStripMenuItem($"{Strings.SysAdapterPower}: ") { Enabled = false };
       sysInfoMenu.DropDownItems.Add(adapterPowerMenu);
 
+      // 实际功耗限制、降频、冲突软件、上次关机状态（每次展开菜单时刷新）
+      var sysCpuLimitMenu = new ToolStripMenuItem() { Enabled = false };
+      var sysThrottleMenu = new ToolStripMenuItem() { Enabled = false };
+      var sysConflictMenu = new ToolStripMenuItem() { Enabled = false };
+      var sysShutdownMenu = new ToolStripMenuItem() { Enabled = false };
+      Action refreshSafetyInfo = () => {
+        sysCpuLimitMenu.Text = $"{Strings.SysCpuPowerLimit}: {FormatAppliedPowerLimit()}";
+        sysThrottleMenu.Text = $"{Strings.SysThrottle}: {FormatThrottle()}";
+        sysConflictMenu.Text = $"{Strings.SysConflicts}: {FormatConflicts()}";
+        sysShutdownMenu.Text = $"{Strings.SysLastShutdown}: {FormatLastShutdown()}";
+      };
+      refreshSafetyInfo();
+      sysInfoMenu.DropDownItems.Add(new ToolStripSeparator());
+      sysInfoMenu.DropDownItems.Add(sysCpuLimitMenu);
+      sysInfoMenu.DropDownItems.Add(sysThrottleMenu);
+      sysInfoMenu.DropDownItems.Add(sysConflictMenu);
+      sysInfoMenu.DropDownItems.Add(sysShutdownMenu);
+      sysInfoMenu.DropDownOpening += (s, e) => refreshSafetyInfo();
+
       System.Threading.Tasks.Task.Run(() => {
         // PawnIO信息
         if (!IsPawnIOInstalled())
@@ -424,6 +443,17 @@ namespace OmenSuperHub {
 
       fanControlMenu.DropDownItems.Add(fanTrackBar);
       fanControlMenu.DropDownItems.Add(fanValueLabel);
+
+      // 风扇校准：测量实际最高转速，并据此设定转速滑块上限
+      fanControlMenu.DropDownItems.Add(new ToolStripSeparator());
+      var fanCalibrationInfo = new ToolStripMenuItem(FormatCalibrationInfo() ?? "") { Enabled = false, Visible = FormatCalibrationInfo() != null };
+      fanControlMenu.DropDownItems.Add(fanCalibrationInfo);
+      fanControlMenu.DropDownItems.Add(CreateMenuItem(Strings.FanCalibrateMenu, null, (s, e) => StartFanCalibration(fanControlMenu), false));
+      fanControlMenu.DropDownOpening += (s, e) => {
+        string info = FormatCalibrationInfo();
+        fanCalibrationInfo.Text = info ?? "";
+        fanCalibrationInfo.Visible = info != null;
+      };
       menu.Items.Add(fanControlMenu);
 
       performanceControlMenu = new ToolStripMenuItem(Strings.PerfControl);
@@ -612,6 +642,10 @@ namespace OmenSuperHub {
         ToolStripMenuItem cpuPowerMenu = new ToolStripMenuItem(Strings.CpuPowerMenu);
 
         cpuPowerMenu.DropDownItems.Add(new ToolStripMenuItem(Strings.PerfCpuPowerTip) { Enabled = false });
+        // CPU 实际生效的 PL1/PL2（MSR 0x610）：与上面的设置对照，能看出是否被其他软件覆盖
+        var cpuPowerAppliedItem = new ToolStripMenuItem(Strings.CpuPowerApplied(FormatAppliedPowerLimit())) { Enabled = false };
+        cpuPowerMenu.DropDownItems.Add(cpuPowerAppliedItem);
+        cpuPowerMenu.DropDownOpening += (s, e) => cpuPowerAppliedItem.Text = Strings.CpuPowerApplied(FormatAppliedPowerLimit());
         cpuPowerMenu.DropDownItems.Add(new ToolStripSeparator());
         cpuPowerMenu.DropDownItems.Add(CreateMenuItem(Strings.NotSet, "cpuPowerGroup", (s, e) => {
           cpuPower = "null";
@@ -766,12 +800,14 @@ namespace OmenSuperHub {
           int val = gpuCoreOverclockTrackBar.Value * 15;
           gpuCoreOverclockValueLabel.Text = string.Format(Strings.CurrentSliderValueTemp, $"{val} MHz");
           gpuCoreOverclock = gpuCoreOverclockTrackBar.Value * 15;
+          gpuOcUserReapplied = true; // 用户手动应用 → 解除异常关机保护
           Task.Run(() => SetCoreClockOffset(gpuCoreOverclock));
           SaveConfig("GpuCoreOverclock");
           UpdateCheckedState("gpuCoreOverclockGroup", Strings.SetGpuCoreOverclockSlider);
         };
         gpuCoreOverclockTrackBar.MouseUp += (sender, e) => {
           gpuCoreOverclock = gpuCoreOverclockTrackBar.Value * 15;
+          gpuOcUserReapplied = true; // 用户手动应用 → 解除异常关机保护
           Task.Run(() => SetCoreClockOffset(gpuCoreOverclock));
           SaveConfig("GpuCoreOverclock");
           UpdateCheckedState("gpuCoreOverclockGroup", Strings.SetGpuCoreOverclockSlider);
@@ -798,12 +834,14 @@ namespace OmenSuperHub {
           int val = gpuMemoryOverclockTrackBar.Value * 100;
           gpuMemoryOverclockValueLabel.Text = string.Format(Strings.CurrentSliderValueTemp, $"{val} MHz");
           gpuMemoryOverclock = gpuMemoryOverclockTrackBar.Value * 100;
+          gpuOcUserReapplied = true; // 用户手动应用 → 解除异常关机保护
           Task.Run(() => SetMemoryClockOffset(gpuMemoryOverclock));
           SaveConfig("GpuMemoryOverclock");
           UpdateCheckedState("gpuMemoryOverclockGroup", Strings.SetGpuMemoryOverclockSlider);
         };
         gpuMemoryOverclockTrackBar.MouseUp += (sender, e) => {
           gpuMemoryOverclock = gpuMemoryOverclockTrackBar.Value * 100;
+          gpuOcUserReapplied = true; // 用户手动应用 → 解除异常关机保护
           Task.Run(() => SetMemoryClockOffset(gpuMemoryOverclock));
           SaveConfig("GpuMemoryOverclock");
           UpdateCheckedState("gpuMemoryOverclockGroup", Strings.SetGpuMemoryOverclockSlider);
