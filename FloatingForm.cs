@@ -179,6 +179,18 @@ namespace OmenSuperHub {
       AdjustFormSize();
       SetAnchoredPosition(loc, screen);
       RenderCurrentImage();
+      KeepOnTop();
+    }
+
+    /// <summary>
+    /// TopMost 只在创建时设置一次，之后其他置顶窗口（无边框全屏游戏、自带置顶的程序等）
+    /// 被激活时会把浮窗压到下面且不会自动恢复。每次刷新时重新声明置顶，且不抢焦点。
+    /// 注：独占全屏（exclusive fullscreen）的 DirectX 程序上方无法绘制任何普通窗口。
+    /// </summary>
+    private void KeepOnTop() {
+      if (!IsHandleCreated || !Visible) return;
+      SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
     }
 
     private void AdjustFormSize() {
@@ -264,6 +276,11 @@ namespace OmenSuperHub {
     private const int  ULW_ALPHA         = 0x02;
     private const byte AC_SRC_OVER       = 0x00;
     private const byte AC_SRC_ALPHA      = 0x01;
+    private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    private const uint SWP_NOSIZE         = 0x0001;
+    private const uint SWP_NOMOVE         = 0x0002;
+    private const uint SWP_NOACTIVATE     = 0x0010;
+    private const uint SWP_NOOWNERZORDER  = 0x0200;
 
     // ── 结构体 ───────────────────────────────────────────────────────────
     [StructLayout(LayoutKind.Sequential)]
@@ -275,6 +292,7 @@ namespace OmenSuperHub {
 
     // ── P/Invoke ─────────────────────────────────────────────────────────
     [DllImport("user32.dll")] static extern bool   UpdateLayeredWindow(IntPtr hwnd, IntPtr hdcDst, ref NativePoint pptDst, ref NativeSize psize, IntPtr hdcSrc, ref NativePoint pptSrc, uint crKey, ref BLENDFUNCTION pblend, uint dwFlags);
+    [DllImport("user32.dll")] static extern bool   SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
     [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr hWnd);
     [DllImport("user32.dll")] static extern int    ReleaseDC(IntPtr hWnd, IntPtr hDC);
     [DllImport("gdi32.dll")]  static extern IntPtr CreateCompatibleDC(IntPtr hDC);

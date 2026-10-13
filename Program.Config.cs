@@ -56,7 +56,7 @@ namespace OmenSuperHub {
     }
 
     /// <summary>
-    /// 获取当前系统 UI 语言对应的语言代码（zh-CN / zh-TW / en）
+    /// 获取当前系统 UI 语言对应的语言代码（zh-CN / zh-TW / en / tr）
     /// 若无法匹配，返回 "en"
     /// </summary>
     private static string GetSystemLanguage() {
@@ -74,6 +74,10 @@ namespace OmenSuperHub {
           cultureName.Equals("zh-HK", StringComparison.OrdinalIgnoreCase) ||
           cultureName.Equals("zh-MO", StringComparison.OrdinalIgnoreCase)) {
         return "zh-TW";
+      }
+      // 土耳其语：tr, tr-TR 等
+      if (cultureName.StartsWith("tr", StringComparison.OrdinalIgnoreCase)) {
+        return "tr";
       }
       // 英语：en, en-US, en-GB 等
       if (cultureName.StartsWith("en", StringComparison.OrdinalIgnoreCase)) {
@@ -203,6 +207,7 @@ namespace OmenSuperHub {
       switch (lang) {
         case "zh-TW": Strings.Current = AppLanguage.TraditionalChinese; break;
         case "en": Strings.Current = AppLanguage.English; break;
+        case "tr": Strings.Current = AppLanguage.Turkish; break;
         default: Strings.Current = AppLanguage.SimplifiedChinese; break;
       }
     }
@@ -369,7 +374,7 @@ namespace OmenSuperHub {
         fanControlTimer.Change(0, 1000);
         UpdateCheckedState("fanControlGroup", Strings.FanAuto);
       } else if (fanControl.Contains("max")) {
-        SetMaxFanSpeedOn();
+        ApplyMaxFan();
         fanControlTimer.Change(Timeout.Infinite, Timeout.Infinite);
         UpdateCheckedState("fanControlGroup", Strings.FanMax);
       } else if (fanControl.Contains(" RPM")) {
@@ -378,7 +383,8 @@ namespace OmenSuperHub {
         int rpmValue = int.Parse(fanControl.Replace(" RPM", "").Trim());
         SetFanLevel(rpmValue / 100, rpmValue / 100, Is3FanNb);
         if (fanTrackBar != null) {
-          fanTrackBar.Value = rpmValue / 100;
+          // 保存的转速可能高于当前滑块上限，越界赋值会抛异常
+          fanTrackBar.Value = Math.Min(rpmValue / 100, fanTrackBar.Maximum);
         }
         UpdateCheckedState("fanControlGroup", Strings.SetFanSpeedSlider);
       }
@@ -424,6 +430,86 @@ namespace OmenSuperHub {
       }
       if (maxFanSpeed.HasValue)
         platformMaxFanSpeed = maxFanSpeed.Value * 100;
+    }
+
+    static int fanSliderMaxRpmOverride = -1; // -1 = 尚未从注册表读取
+
+    /// <summary>
+    /// 读取可选的整数覆盖值：先查 HKCU，再查 HKLM。
+    /// 程序可能由计划任务在不同上下文中启动，只依赖 HKCU 并不可靠。
+    /// 首次读取时把看到的内容写入日志，便于排查。
+    /// </summary>
+    static int ReadIntOverride(string valueName) {
+      foreach (var hive in new[] { Registry.CurrentUser, Registry.LocalMachine }) {
+        try {
+          using (RegistryKey key = hive.OpenSubKey(@"Software\OmenSuperHub")) {
+            if (key == null) {
+              Logger.Info($"Override {valueName}: {hive.Name}\\Software\\OmenSuperHub 不存在");
+              continue;
+            }
+            object raw = key.GetValue(valueName, null);
+            Logger.Info($"Override {valueName}: {hive.Name} raw={(raw ?? "null")} " +
+                        $"type={(raw == null ? "-" : key.GetValueKind(valueName).ToString())} " +
+                        $"valueCount={key.ValueCount} user={System.Security.Principal.WindowsIdentity.GetCurrent().Name}");
+            if (raw != null)
+              return Convert.ToInt32(raw);
+          }
+        } catch (Exception ex) {
+          Logger.Error($"Override {valueName} @ {hive.Name}: {ex.Message}");
+        }
+      }
+      return 0;
+    }
+
+    /// <summary>
+    /// 转速滑块与风扇曲线编辑器的转速上限（RPM）。
+    /// 默认为平台最大转速的 140%：实测（平台值 5800）重负载下 EC 可把风扇推到约 7500，
+    /// 超过约 8000 的目标不再有任何变化；110% 会让滑块在风扇真正到顶之前就截止。
+    /// 可由 FanSliderMaxRpm 覆盖（0 = 自动）。转速以单字节、100 RPM 为单位下发。
+    /// </summary>
+    static int GetFanSliderMaxRpm() {
+      if (fanSliderMaxRpmOverride < 0)
+        fanSliderMaxRpmOverride = ReadIntOverride("FanSliderMaxRpm");
+
+      int autoMax = platformMaxFanSpeed > 0 ? (int)(platformMaxFanSpeed.Value * 1.4) : 6400;
+      int result = fanSliderMaxRpmOverride > 0 ? fanSliderMaxRpmOverride : autoMax;
+      return Math.Min(MaxSafeFanLevel * 100, Math.Max(1000, result / 100 * 100));
+    }
+
+    // 转速等级以单字节下发，bit7(=128) 被 SetFanLevel 用作反转/除尘标志，
+    // 因此手动转速等级必须保持在 127 以内，否则可能触发风扇反转。
+    const int MaxSafeFanLevel = 127;
+
+    static int fanMaxRpmOverride = -1; // -1 = 尚未从注册表读取
+
+    /// <summary>
+    /// “最大风扇”菜单项使用的转速（RPM）。注册表值 FanMaxRpm（DWORD）：
+    ///   0 / 不存在 = 使用滑块上限直接下发（默认，即硬件实际极限）；
+    ///   1          = 使用 BIOS 最大风扇模式（原始行为，转速由 BIOS 决定，通常偏保守）；
+    ///   ≥100       = 直接下发该转速。
+    /// </summary>
+    static int GetFanMaxRpm() {
+      if (fanMaxRpmOverride < 0)
+        fanMaxRpmOverride = ReadIntOverride("FanMaxRpm");
+      return fanMaxRpmOverride;
+    }
+
+    /// <summary>
+    /// 应用“最大风扇”。默认关闭 BIOS 最大风扇模式并直接下发转速，
+    /// 让两个风扇各自跑到 EC 允许的最高转速（BIOS 模式实测会停在出厂值附近）。
+    /// </summary>
+    static void ApplyMaxFan() {
+      int rpm = GetFanMaxRpm();
+      if (rpm == 1) {
+        SetMaxFanSpeedOn();
+        return;
+      }
+      if (rpm < 100)
+        rpm = GetFanSliderMaxRpm();
+      int level = Math.Min(MaxSafeFanLevel, Math.Max(1, rpm / 100));
+      Logger.Info($"ApplyMaxFan: level={level} ({level * 100} RPM)");
+      SetMaxFanSpeedOff(); // BIOS 最大风扇模式会覆盖手动下发的转速
+      SetFanLevel(level, level, Is3FanNb);
     }
 
     static FanCurveProfile CreateDefaultFanCurveProfile(bool isSilent) {
@@ -1083,7 +1169,7 @@ namespace OmenSuperHub {
         fanControlTimer.Change(0, 1000);
         UpdateCheckedState("fanControlGroup", Strings.FanAuto);
       } else if (fanControl.Contains("max")) {
-        SetMaxFanSpeedOn();
+        ApplyMaxFan();
         fanControlTimer.Change(Timeout.Infinite, Timeout.Infinite);
         UpdateCheckedState("fanControlGroup", Strings.FanMax);
       } else if (fanControl.Contains(" RPM")) {
@@ -1091,7 +1177,7 @@ namespace OmenSuperHub {
         fanControlTimer.Change(Timeout.Infinite, Timeout.Infinite);
         int rpmValue = int.Parse(fanControl.Replace(" RPM", "").Trim());
         SetFanLevel(rpmValue / 100, rpmValue / 100, Is3FanNb);
-        if (fanTrackBar != null) fanTrackBar.Value = rpmValue / 100;
+        if (fanTrackBar != null) fanTrackBar.Value = Math.Min(rpmValue / 100, fanTrackBar.Maximum);
         UpdateCheckedState("fanControlGroup", Strings.SetFanSpeedSlider);
       }
 
@@ -1397,7 +1483,8 @@ namespace OmenSuperHub {
           RestoreOmenKeyAction();
 
           textSize = (int)key.GetValue("FloatingBarSize", 40);
-          if (textSizeTrackBar != null) textSizeTrackBar.Value = textSize / 4;
+          if (textSizeTrackBar != null)
+            textSizeTrackBar.Value = Math.Max(TextSizeSliderMin, Math.Min(TextSizeSliderMax, textSize / TextSizeStep));
 
           floatingBarLoc = (string)key.GetValue("FloatingBarLoc", "left");
           UpdateCheckedState("floatingBarLocGroup", floatingBarLoc == "left" ? Strings.FloatingLocLeft : Strings.FloatingLocRight);

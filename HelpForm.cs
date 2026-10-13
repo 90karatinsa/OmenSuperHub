@@ -77,6 +77,9 @@ namespace OmenSuperHub {
         case AppLanguage.English:
           content = GetHelpHtml_EN(version);
           break;
+        case AppLanguage.Turkish:
+          content = GetHelpHtml_TR(version);
+          break;
         default:
           content = GetHelpHtml_ZH(version);
           break;
@@ -338,7 +341,74 @@ namespace OmenSuperHub {
 <p>(4) Data Localize: saves CPU/GPU temp and fan RPM to local .txt files (useful for Macro Deck);</p>
 <p>(5) Autostart: creates a Task Scheduler entry to launch OSH at boot;</p>
 <p>(6) Disable autostart: removes the Task Scheduler entry;</p>
-<p>(7) Language: switch between Simplified Chinese, Traditional Chinese, and English. Restart to fully apply.</p>
+<p>(7) Language: switch between Simplified Chinese, Traditional Chinese, English, and Turkish. Restart to fully apply.</p>
+";
+    }
+
+    // 土耳其文 HTML 内容
+    private static string GetHelpHtml_TR(Version version) {
+      return $@"
+<h2>📦 OmenSuperHub v{Assembly.GetExecutingAssembly().GetName().Version} Sürüm Notları</h2>
+<div class='update-list'>
+<p><strong>Yenilikler:</strong></p>
+<li>✨ CPU/GPU frekans izleme eklendi<a href='https://github.com/breadeding/OmenSuperHub/pull/76'> (#76, Helloqiyuan)</a></li>
+<p><strong>İyileştirmeler:</strong></p>
+<li>⚡ Yüzen pencerenin uyarlanabilir genişliği iyileştirildi<a href='https://github.com/breadeding/OmenSuperHub/pull/76'> (#76, Helloqiyuan)</a></li>
+<p><strong>Düzeltmeler:</strong></p>
+<li>🐛 UMA modunda ekran kartının varlığının doğru algılanmaması</li>
+<li>🐛 Kaydırıcıyı yalnızca fare tekerleğiyle ayarlarken değişikliğin uygulanmaması / kutucuğun işaretlenmemesi</li>
+</div>
+
+<p>Bu proje Github'da açık kaynaktır: <a href='https://github.com/breadeding/OmenSuperHub'>https://github.com/breadeding/OmenSuperHub</a></p>
+
+<hr/>
+
+<h2>1. ""Fan Profili"" menüsü</h2>
+<p>(1) Üç fan profili desteklenir. Sessiz mod ""silent.txt"", Soğutma modu ""cool.txt"" dosyasını yükler. Özel'e sol tıklamak ""custom.txt"" dosyasını uygular; sağ tıklamak CPU/GPU eğri düzenleyicisini açar. Uygulama sırasında custom.txt yoksa önce cool.txt kopyalanır;</p>
+<p>(2) Düzenleyicide nokta eklemek için sol tıklayın, ayarlamak için sürükleyin, silmek için sağ tıklayın. ""Kaydet"" yalnızca dosyayı yazar; ""Kaydet ve Uygula"" dosyayı yazıp özel eğriye hemen geçer. ""Yükle"" başka bir txt profilini içe aktarır. Eğrilerde 1°C hassasiyetle doğrusal ara değerleme kullanılır;</p>
+<p>(3) Gerçek Zamanlı / Yüksek / Orta / Düşük tepki modları giderek artan sıcaklık yumuşatması uygular.</p>
+
+<h2>2. ""Fan Kontrolü"" menüsü</h2>
+<p>(1) Otomatik: OSH, fan profiline ve güncel sıcaklığa göre (CPU/GPU'dan yüksek olanı) fan hızını belirler;</p>
+<p>(2) Maksimum Fan: BIOS tarafından kontrol edilir; her zaman en yüksek RPM anlamına gelmez;</p>
+<p>(3) Sabit RPM: CPU sıcaklığı (platform üst sınırı − 2)°C değerini aşarsa OSH bir balon uyarısı gösterir ve Otomatik moda geçer;</p>
+<p>(4) OMEN 16 2023 aralığı: 0–6400 RPM. 2000 RPM altı için BIOS'ta ""Always on"" fan seçeneğinin kapalı olması gerekir.</p>
+
+<h2>3. ""Performans"" menüsü</h2>
+<p>(1) Grafik modu, BIOS ayarlarındaki soğuk geçişe karşılık gelir; sıcak geçiş ise NVIDIA Advanced Optimus'tur;</p>
+<p>(2) PPab (Tpp): NVIDIA® Dynamic Boost için CPU ile GPU arasındaki toplam güç bütçesini artırır;</p>
+<p>(3) IccMax: gerilim düzenleyici için maksimum CPU akım sınırı;</p>
+<p>(4) AC Load Line: yük hattı kalibrasyonu, gerilim düşüşünü telafi etmek için CPU voltajını ayarlar;</p>
+<p>(5) GPU TDP = BTGP + CTGP + DB/Ppab. En yüksek GPU performansı için CTGP ve DB'yi etkinleştirin;</p>
+<p>(6) DB sürümü, Aygıt Yöneticisi → Yazılım aygıtları → NVIDIA Platform Controllers altındaki sürücüyü ifade eder. Kilidi açık sürüm 31.0.15.3730 kullanır;</p>
+<p>(7) ""Kilidi Açık Sürüm""e tıklamak diğer DB sürücülerini kaldırır ve güncel güç durumunu sabitlemek için etkinleştirme/devre dışı bırakma işlemini uygular (yalnızca 40 serisi ve öncesi);</p>
+<p>(8) Kilit açma her yeniden başlatmada sıfırlanır — bu özelliği kullanıyorsanız açılışta otomatik başlatmayı etkinleştirin;</p>
+<p>(9) GPU güç sınırı anormallik iletisi görünürse kilit açma işlemini yeniden deneyin;</p>
+<p>(10) CPU gücü değişikliği hem PL1 hem PL2 değerini ayarlar;</p>
+<p>(11) GPU frekans sınırı maksimum GPU frekansını düşürür (hız aşırtma değildir).</p>
+
+<h2>4. ""Donanım İzleme"" menüsü</h2>
+<p>(1) İlgili izleme bilgilerini açıp kapatabilirsiniz. Hibrit mod kullanıyorsanız, GPU kullanılmadığında GPU izlemeyi kapatmanız önerilir; aksi hâlde güç tüketimi artabilir.</p>
+
+<h2>5. ""Yüzen Pencere"" menüsü</h2>
+<p>(1) Donanım bilgilerini ekranın üst kısmında gösterir; saniyede bir yenilenir.</p>
+
+<h2>6. ""Omen Tuşu"" menüsü</h2>
+<p>(1) Varsayılan: Omen tuşunu Görev Zamanlayıcı'daki ""Omen Key"" görevine bağlar;</p>
+<p>(2) Yüzen Pencereyi Aç/Kapat: Omen tuşuna basmak yüzen pencereyi açıp kapatır;</p>
+<p>(3) Hazır Ayar Değiştir: Omen tuşuna basmak hazır ayarlar arasında sırayla geçiş yapar;</p>
+<p>(4) Uygulama Aç: Omen tuşuna basmak seçilen uygulamayı açar;</p>
+<p>(5) Not: Omen tuşu bazı HP hizmetlerine bağımlı olabilir;</p>
+<p>(6) Bağlantıyı Kaldır: Omen tuşu hiçbir işlem yapmaz.</p>
+
+<h2>7. ""Ayarlar"" menüsü</h2>
+<p>(1) Orijinal simge: yerleşik simge;</p>
+<p>(2) Özel simge: program klasörüne custom.ico dosyasını koyun;</p>
+<p>(3) Dinamik simge: güncel CPU (veya GPU) sıcaklığını gösterir, saniyede bir yenilenir;</p>
+<p>(4) Verileri Yerelde Sakla: CPU/GPU sıcaklığını ve fan RPM değerini yerel .txt dosyalarına kaydeder (Macro Deck için kullanışlıdır);</p>
+<p>(5) Açılışta Başlat: OSH'yi açılışta çalıştırmak için bir Görev Zamanlayıcı kaydı oluşturur;</p>
+<p>(6) Açılışta başlatmayı kapatmak: Görev Zamanlayıcı kaydını siler;</p>
+<p>(7) Dil: Basitleştirilmiş Çince, Geleneksel Çince, İngilizce ve Türkçe arasında geçiş yapar. Tam olarak uygulanması için programı yeniden başlatın.</p>
 ";
     }
   }

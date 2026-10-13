@@ -21,6 +21,23 @@ namespace OmenSuperHub {
       public string ProcessName { get; set; }
     }
 
+    /// <summary>
+    /// 在多块 NVIDIA 显卡（如外接显卡 eGPU）同时存在时，返回笔记本自身的独显。
+    /// NVAPI 的枚举顺序不固定，外接显卡可能排在第一位，直接取 [0] 会把超频等设置施加到 eGPU 上。
+    /// 规则：优先名称含 "Laptop" 的 GPU（NVIDIA 移动版命名），否则退回第一块。
+    /// </summary>
+    static PhysicalGPU PickInternalGpu(PhysicalGPU[] gpus) {
+      if (gpus == null || gpus.Length == 0)
+        throw new Exception("未找到 GPU");
+      foreach (var g in gpus) {
+        try {
+          if (g.FullName != null && g.FullName.IndexOf("Laptop", StringComparison.OrdinalIgnoreCase) >= 0)
+            return g;
+        } catch { }
+      }
+      return gpus[0];
+    }
+
     public static void SetCoreClockOffset(int offsetMHz) {
       NVIDIA.Initialize();
 
@@ -29,7 +46,7 @@ namespace OmenSuperHub {
         if (gpus.Length == 0)
           throw new Exception("未找到 GPU");
 
-        PhysicalGPU gpu = gpus[0];
+        PhysicalGPU gpu = PickInternalGpu(gpus);
 
         // 构造时钟偏移条目，单位 kHz
         var clockDelta = new PerformanceStates20ClockEntryV1(
@@ -60,7 +77,7 @@ namespace OmenSuperHub {
     public static void SetMemoryClockOffset(int offsetMHz) {
       NVIDIA.Initialize();
       try {
-        PhysicalGPU gpu = PhysicalGPU.GetPhysicalGPUs()[0];
+        PhysicalGPU gpu = PickInternalGpu(PhysicalGPU.GetPhysicalGPUs());
 
         var clockDelta = new PerformanceStates20ClockEntryV1(
             PublicClockDomain.Memory,                              // 显存时钟域
@@ -86,7 +103,7 @@ namespace OmenSuperHub {
     public static int GetCoreClockOffset() {
       NVIDIA.Initialize();
       try {
-        PhysicalGPU gpu = PhysicalGPU.GetPhysicalGPUs()[0];
+        PhysicalGPU gpu = PickInternalGpu(PhysicalGPU.GetPhysicalGPUs());
         var pstatesInfo = GPUApi.GetPerformanceStates20(gpu.Handle);
 
         // 从 Clocks 字典中获取 P0 状态的时钟条目数组
@@ -107,7 +124,7 @@ namespace OmenSuperHub {
     public static int GetMemoryClockOffset() {
       NVIDIA.Initialize();
       try {
-        PhysicalGPU gpu = PhysicalGPU.GetPhysicalGPUs()[0];
+        PhysicalGPU gpu = PickInternalGpu(PhysicalGPU.GetPhysicalGPUs());
         var pstatesInfo = GPUApi.GetPerformanceStates20(gpu.Handle);
 
         if (pstatesInfo.Clocks.TryGetValue(PerformanceStateId.P0_3DPerformance, out var clockEntries)) {
@@ -130,7 +147,7 @@ namespace OmenSuperHub {
         if (gpus.Length == 0)
           return 0;
 
-        PhysicalGPU gpu = gpus[0];
+        PhysicalGPU gpu = PickInternalGpu(gpus);
 
         var info = GPUApi.GetAllClockFrequencies(
             gpu.Handle,
@@ -155,7 +172,7 @@ namespace OmenSuperHub {
         if (gpus.Length == 0)
           return 0;
 
-        PhysicalGPU gpu = gpus[0];
+        PhysicalGPU gpu = PickInternalGpu(gpus);
 
         var info = GPUApi.GetAllClockFrequencies(
             gpu.Handle,
@@ -223,7 +240,7 @@ namespace OmenSuperHub {
 
         // 可选：根据结果给出提示
         if (result.ExitCode != 0) {
-          MessageBox.Show(Application.OpenForms.OfType<HelpForm>().FirstOrDefault(), $"{Strings.RestartGPUFailed} {Strings.Error}：{result.Error}", Strings.Hint, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+          MessageBox.Show(Application.OpenForms.OfType<HelpForm>().FirstOrDefault(), $"{Strings.RestartGPUFailed} {Strings.Error}: {result.Error}", Strings.Hint, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
       } catch {
         MessageBox.Show(Application.OpenForms.OfType<HelpForm>().FirstOrDefault(), Strings.RestartGPUFailed, Strings.Hint, MessageBoxButtons.OK, MessageBoxIcon.Warning);

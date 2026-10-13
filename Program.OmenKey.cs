@@ -378,7 +378,7 @@ namespace OmenSuperHub {
         Text = omenKeyAppPath
       };
       var browseButton = new Button {
-        Text = "浏览...",
+        Text = Strings.Browse,
         Width = 92,
         Height = 30,
         Left = form.ClientSize.Width - 104,

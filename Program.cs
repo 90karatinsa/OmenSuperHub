@@ -98,6 +98,8 @@ namespace OmenSuperHub {
     static int DBVersion = 2, countDB = 0, countDBInit = 10, tryTimes = 0, maxRetry = 5, CPULimitDB = 20;
     static ToolStripMenuItem performanceControlMenu;
     static int textSize = 40;
+    // 浮窗字号滑块：滑块值 × TextSizeStep = 实际字号（12 - 96）
+    const int TextSizeStep = 2, TextSizeSliderMin = 6, TextSizeSliderMax = 48;
     static int countRestore = 0, gpuClock = 0, gpuCoreOverclock = -1, gpuMemoryOverclock = -1, maxFrameRate = -1, graphicsBoostClock = 0;
     static int alreadyRead = 0, alreadyReadCode = 1000;
     static readonly string[] PresetOrder = { "PresetExtreme", "PresetGpuPriority", "PresetLightUse", "PresetCustom1", "PresetCustom2", "PresetCustom3" };
@@ -118,6 +120,10 @@ namespace OmenSuperHub {
     static float CPUTemp = 50, GPUTemp = 40, rawTempCPU = 50f, rawTempGPU = 40f;
     static float CPUPower = 0, GPUPower = 0, CPUFrequency = 0f, GPUFrequency = 0f, rawPowerCPU = 0f, rawPowerGPU = 0f, rawFrequencyCPU = 0f, rawFrequencyGPU = 0f;
     static bool rawGotGPU = false;
+    // 外接显卡（eGPU）读数：仅用于显示，不参与风扇控制（笔记本风扇不为 eGPU 散热）
+    static volatile bool hasEGPU = false;
+    static bool eGpuLogged = false;
+    static float rawTempEGPU = 0f, rawPowerEGPU = 0f;
     static volatile bool tempReady = false;   // 子进程首次输出有效温度后置 true
     static volatile bool cpuTempReady = false; // CPU 温度已初始化给平滑值，允许参与风扇控制
     static volatile bool gpuTempReady = false; // GPU 温度已初始化给平滑值，允许参与风扇控制
@@ -369,16 +375,16 @@ namespace OmenSuperHub {
       using (var searcher = new ManagementObjectSearcher("SELECT SMBIOSBIOSVersion FROM Win32_BIOS"))
       using (var collection = searcher.Get())
         foreach (ManagementObject obj in collection)
-          return obj["SMBIOSBIOSVersion"]?.ToString() ?? "未知";
-      return "未知";
+          return obj["SMBIOSBIOSVersion"]?.ToString() ?? Strings.SysUnknown;
+      return Strings.SysUnknown;
     }
 
     static string GetCpuModel() {
       using (var searcher = new ManagementObjectSearcher("SELECT Name FROM Win32_Processor"))
       using (var collection = searcher.Get())
         foreach (ManagementObject obj in collection)
-          return obj["Name"]?.ToString()?.Trim() ?? "未知";
-      return "未知";
+          return obj["Name"]?.ToString()?.Trim() ?? Strings.SysUnknown;
+      return Strings.SysUnknown;
     }
 
     public static bool HasIntelCpu() {
@@ -577,7 +583,11 @@ namespace OmenSuperHub {
         bool gGpu = false;
         bool exactCpuClockFound = false;
         float fCpu = 0, fGpu = 0;
+        // 外接显卡（eGPU）单独统计，避免与笔记本自身独显的读数互相覆盖
+        bool hasExtGpu = false;
+        float tExtGpu = 0, pExtGpu = 0;
         try {
+          LibreIHardware internalGpu = PickInternalGpu(computer.Hardware);
           foreach (LibreIHardware hw in computer.Hardware) {
             if (hw.HardwareType != LibreHardwareType.Cpu && hw.HardwareType != LibreHardwareType.GpuNvidia && hw.HardwareType != LibreHardwareType.GpuAmd) continue;
 
@@ -588,6 +598,21 @@ namespace OmenSuperHub {
             } catch (Exception ex) {
               Console.Error.WriteLine("CRASH: Update failed - " + ex.Message);
               Environment.Exit(1);
+            }
+
+            if (hw.HardwareType != LibreHardwareType.Cpu && !ReferenceEquals(hw, internalGpu)) {
+              // 只把额外的 NVIDIA 卡视为 eGPU；其余（如锐龙的 AMD 核显）直接跳过，也不混入独显读数
+              if (hw.HardwareType != LibreHardwareType.GpuNvidia) continue;
+              hasExtGpu = true;
+              foreach (LibreISensor sensor in hw.Sensors) {
+                try {
+                  if (sensor.SensorType == LibreSensorType.Temperature && sensor.Name == "GPU Core" && sensor.Value.HasValue)
+                    tExtGpu = sensor.Value.Value;
+                  if (sensor.SensorType == LibreSensorType.Power && sensor.Name == "GPU Package" && sensor.Value.HasValue)
+                    pExtGpu = sensor.Value.Value;
+                } catch { }
+              }
+              continue;
             }
             //Console.Error.WriteLine("CRASH: " + $"5: {sw.ElapsedMilliseconds}ms");
             foreach (LibreISensor sensor in hw.Sensors) {
@@ -623,13 +648,32 @@ namespace OmenSuperHub {
               } catch { }
             }
           }
-          Console.WriteLine(string.Format(CultureInfo.InvariantCulture, "{0:F2};{1:F2};{2:F2};{3:F2};{4};{5:F2};{6:F2}", tCpu, pCpu, tGpu, pGpu, gGpu ? 1 : 0, fCpu, fGpu));
+          // 字段 7-9：eGPU 温度、功率、是否存在
+          Console.WriteLine(string.Format(CultureInfo.InvariantCulture, "{0:F2};{1:F2};{2:F2};{3:F2};{4};{5:F2};{6:F2};{7:F2};{8:F2};{9}",
+              tCpu, pCpu, tGpu, pGpu, gGpu ? 1 : 0, fCpu, fGpu, tExtGpu, pExtGpu, hasExtGpu ? 1 : 0));
         } catch (Exception ex) {
           Console.Error.WriteLine("CRASH: " + ex.Message);
           Environment.Exit(1);
         }
         Thread.Sleep(sleepMs);
       }
+    }
+
+    /// <summary>
+    /// 在多块独显（如外接显卡 eGPU）同时存在时，确定笔记本自身的独显。
+    /// LHM 的枚举顺序不固定，实测 eGPU 可能排在前面，因此不能按顺序“后者覆盖前者”。
+    /// 规则：优先名称含 "Laptop" 的 GPU（NVIDIA 移动版命名），其次第一块 NVIDIA，最后第一块 GPU
+    /// （AMD 核显也会以 GpuAmd 出现，所以 NVIDIA 优先）。
+    /// </summary>
+    static LibreIHardware PickInternalGpu(IEnumerable<LibreIHardware> hardware) {
+      LibreIHardware firstNvidia = null, firstAny = null;
+      foreach (var hw in hardware) {
+        if (hw.HardwareType != LibreHardwareType.GpuNvidia && hw.HardwareType != LibreHardwareType.GpuAmd) continue;
+        if (hw.Name != null && hw.Name.IndexOf("Laptop", StringComparison.OrdinalIgnoreCase) >= 0) return hw;
+        if (firstNvidia == null && hw.HardwareType == LibreHardwareType.GpuNvidia) firstNvidia = hw;
+        if (firstAny == null) firstAny = hw;
+      }
+      return firstNvidia ?? firstAny;
     }
 
     static void StartHardwareMonitor() {
@@ -653,7 +697,7 @@ namespace OmenSuperHub {
         //Debug.WriteLine("[HWMonitor OUT] " + e.Data); // 将子进程输出重定向到VS的输出窗口
         if (e.Data.StartsWith("CRASH:")) return;
         var parts = e.Data.Split(';');
-        if (parts.Length == 5 || parts.Length == 7) {
+        if (parts.Length == 5 || parts.Length == 7 || parts.Length == 10) {
           if (float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float tc)) rawTempCPU = tc;
           if (float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float pc) && pc < 9999) rawPowerCPU = pc;
           if (float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float tg)) rawTempGPU = tg;
@@ -661,9 +705,20 @@ namespace OmenSuperHub {
           rawGotGPU = parts[4] == "1";
           rawFrequencyCPU = 0f;
           rawFrequencyGPU = 0f;
-          if (parts.Length == 7) {
+          if (parts.Length >= 7) {
             if (float.TryParse(parts[5], NumberStyles.Float, CultureInfo.InvariantCulture, out float fc)) rawFrequencyCPU = fc;
             if (float.TryParse(parts[6], NumberStyles.Float, CultureInfo.InvariantCulture, out float fg)) rawFrequencyGPU = fg;
+          }
+          if (parts.Length >= 10) {
+            if (float.TryParse(parts[7], NumberStyles.Float, CultureInfo.InvariantCulture, out float te)) rawTempEGPU = te;
+            if (float.TryParse(parts[8], NumberStyles.Float, CultureInfo.InvariantCulture, out float pe)) rawPowerEGPU = pe;
+            hasEGPU = parts[9] == "1";
+            if (hasEGPU && !eGpuLogged) {
+              eGpuLogged = true;
+              Logger.Info($"eGPU algilandi: eGPU {rawTempEGPU:F0}C {rawPowerEGPU:F0}W | dahili GPU {rawTempGPU:F0}C {rawPowerGPU:F0}W");
+            }
+          } else {
+            hasEGPU = false;
           }
           // 首次收到数据时，初始化对应传感器的平滑温度
           if (!cpuTempReady) {
@@ -758,7 +813,7 @@ namespace OmenSuperHub {
       if (flagStart < 5) {
         flagStart++;
         if (fanControl.Contains("max")) {
-          SetMaxFanSpeedOn();
+          ApplyMaxFan();
         } else if (fanControl.Contains(" RPM")) {
           SetMaxFanSpeedOff();
           int rpmValue = int.Parse(fanControl.Replace(" RPM", "").Trim());
@@ -1325,6 +1380,7 @@ namespace OmenSuperHub {
     }
 
     static readonly object _floatingLock = new object();
+    static int floatingRecreatePending = 0; // 防止重复投递重建请求
     // 显示浮窗
     static void ShowFloatingForm() {
       lock (_floatingLock) {
@@ -1355,7 +1411,22 @@ namespace OmenSuperHub {
         form = floatingForm;
       }
 
-      if (form == null || form.IsDisposed) return;
+      if (form == null || form.IsDisposed) {
+        // 设置为开启但浮窗不存在（实测开机自启时可能未创建成功）：自动重建，而不是一直静默缺失
+        if (floatingBar == "on" && uiContext != null && Interlocked.Exchange(ref floatingRecreatePending, 1) == 0) {
+          uiContext.Post(_ => {
+            try {
+              if (floatingBar == "on" && (floatingForm == null || floatingForm.IsDisposed)) {
+                Logger.Info("Overlay acik ama pencere yoktu, yeniden olusturuldu");
+                ShowFloatingForm();
+              }
+            } finally {
+              Interlocked.Exchange(ref floatingRecreatePending, 0);
+            }
+          }, null);
+        }
+        return;
+      }
 
       lock (_floatingLock) {
         if (floatingForm == null || floatingForm.IsDisposed) return;
@@ -1403,6 +1474,12 @@ namespace OmenSuperHub {
           if (showGPUFrequency && GPUFrequency > 0) gpuParts.Add($"{GPUFrequency:F0}MHz");
           if (gpuParts.Count > 0) str += $"GPU: {string.Join(", ", gpuParts)}";
           else if (pawnIOState == "RUNNING") str += $"GPU: {Strings.MonitorPrepareLabel}";
+        }
+        if (hasEGPU && (showGPUTemp || showGPUPower)) {
+          var eParts = new List<string>();
+          if (showGPUTemp) eParts.Add($"{rawTempEGPU:F1}°C");
+          if (showGPUPower) eParts.Add($"{rawPowerEGPU:F1}W");
+          str += $"\neGPU: {string.Join(", ", eParts)}";
         }
       }
       if (monitorFan) {
@@ -1471,6 +1548,12 @@ namespace OmenSuperHub {
           if (showGPUFrequency && GPUFrequency > 0) gpuParts.Add($"{GPUFrequency / 1000f:F1}G");
           if (gpuParts.Count > 0) lines.Add($"GPU {string.Join(" ", gpuParts)}");
           else if (pawnIOState == "RUNNING") lines.Add($"GPU {Strings.MonitorPrepareLabel}");
+        }
+        if (hasEGPU && (showGPUTemp || showGPUPower)) {
+          var eParts = new List<string>();
+          if (showGPUTemp) eParts.Add($"{rawTempEGPU:F0}°C");
+          if (showGPUPower) eParts.Add($"{rawPowerEGPU:F0}W");
+          lines.Add($"eGPU {string.Join(" ", eParts)}");
         }
       }
 

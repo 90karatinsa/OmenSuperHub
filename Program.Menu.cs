@@ -388,14 +388,14 @@ namespace OmenSuperHub {
       }, true));
       fanControlMenu.DropDownItems.Add(CreateMenuItem(Strings.FanMax, "fanControlGroup", (s, e) => {
         fanControl = "max";
-        SetMaxFanSpeedOn();
+        ApplyMaxFan();
         fanControlTimer.Change(Timeout.Infinite, Timeout.Infinite);
         SaveConfig("FanControl");
       }, false));
       fanControlMenu.DropDownItems.Add(CreateMenuItem(Strings.SetFanSpeedSlider, "fanControlGroup", (s, e) => { }, false));
       fanTrackBar = new ToolStripTrackBar();
       fanTrackBar.Minimum = 0;
-      fanTrackBar.Maximum = platformMaxFanSpeed > 0 ? (int)(platformMaxFanSpeed * 1.1 / 100) : 64;
+      fanTrackBar.Maximum = GetFanSliderMaxRpm() / 100;
       fanTrackBar.Value = fanTrackBar.Maximum / 2;
       fanTrackBar.TickFrequency = fanTrackBar.Maximum - fanTrackBar.Minimum;
       fanTrackBar.Width = 800;
@@ -1199,17 +1199,17 @@ namespace OmenSuperHub {
       floatingBarMenu.DropDownItems.Add(new ToolStripSeparator()); // Separator between groups
       floatingBarMenu.DropDownItems.Add(new ToolStripMenuItem(Strings.SetTextSizeSlider) { Enabled = false });
       textSizeTrackBar = new ToolStripTrackBar();
-      textSizeTrackBar.Minimum = 6;
-      textSizeTrackBar.Maximum = 18;
-      textSizeTrackBar.Value = 10;
+      textSizeTrackBar.Minimum = TextSizeSliderMin;
+      textSizeTrackBar.Maximum = TextSizeSliderMax;
+      textSizeTrackBar.Value = 20;
       textSizeTrackBar.TickFrequency = textSizeTrackBar.Maximum - textSizeTrackBar.Minimum;
       textSizeTrackBar.Width = 400;
 
-      textSizeLabel = new ToolStripMenuItem(string.Format(Strings.CurrentSliderValueTemp, $"{textSizeTrackBar.Value * 4}")) { Enabled = false };
+      textSizeLabel = new ToolStripMenuItem(string.Format(Strings.CurrentSliderValueTemp, $"{textSizeTrackBar.Value * TextSizeStep}")) { Enabled = false };
 
       textSizeTrackBar.ValueChanged += (sender, e) => {
-        int calculatedSize = textSizeTrackBar.Value * 4; // 实际值 24 - 72
-        textSizeLabel.Text = string.Format(Strings.CurrentSliderValueTemp, $"{textSizeTrackBar.Value * 4}");
+        int calculatedSize = textSizeTrackBar.Value * TextSizeStep; // 实际值 12 - 96
+        textSizeLabel.Text = string.Format(Strings.CurrentSliderValueTemp, $"{calculatedSize}");
         textSize = calculatedSize;
 
         // 即时刷新浮窗
@@ -1422,6 +1422,7 @@ namespace OmenSuperHub {
         (Strings.LangSimplified,  "zh-CN"),
         (Strings.LangTraditional, "zh-TW"),
         (Strings.LangEnglish,     "en"),
+        (Strings.LangTurkish,     "tr"),
       };
       foreach (var lang in langItems) {
         var localLang = lang;
@@ -2123,8 +2124,7 @@ namespace OmenSuperHub {
 
         int cpuMaximum = maxCPUTemp ?? 100;
         int gpuMaximum = maxGPUTemp ?? 90;
-        int detectedMaximum = platformMaxFanSpeed ?? 5600;
-        int fanMaximum = Math.Max(1000, (int)(Math.Ceiling(detectedMaximum * 1.1 / 100D) * 100D));
+        int fanMaximum = GetFanSliderMaxRpm();
         var editor = new FanCurveForm(initialProfile, cpuMaximum, gpuMaximum, fanMaximum, filePath, windowTitle);
         activeFanCurveEditor = editor;
         activeFanCurveEditorPath = filePath;
@@ -2363,6 +2363,7 @@ namespace OmenSuperHub {
       switch (appLanguage) {
         case "zh-TW": targetText = Strings.LangTraditional; break;
         case "en": targetText = Strings.LangEnglish; break;
+        case "tr": targetText = Strings.LangTurkish; break;
         default: targetText = Strings.LangSimplified; break;
       }
       // 在菜单树中找到 languageGroup 中文本匹配的项并勾选
