@@ -219,26 +219,14 @@ namespace OmenSuperHub {
 
       using (TaskService ts = new TaskService()) {
 
-        // ── 任务一：系统启动时以 SYSTEM 账户启动 ──────────────────────────
-        TaskDefinition tdBoot = ts.NewTask();
-        tdBoot.RegistrationInfo.Description = "Start OmenSuperHub at system boot";
-        tdBoot.Principal.RunLevel = TaskRunLevel.Highest;
-        tdBoot.Principal.UserId = "SYSTEM";
-        tdBoot.Principal.LogonType = TaskLogonType.ServiceAccount;
-
-        tdBoot.Actions.Add(new ExecAction(exePath, null, null));
-
-        BootTrigger bootTrigger = new BootTrigger();
-        // bootTrigger.Delay = TimeSpan.FromSeconds(10); // 可选：延迟启动
-        tdBoot.Triggers.Add(bootTrigger);
-
-        tdBoot.Settings.DisallowStartIfOnBatteries = false;
-        tdBoot.Settings.StopIfGoingOnBatteries = false;
-        tdBoot.Settings.ExecutionTimeLimit = TimeSpan.Zero;
-        tdBoot.Settings.AllowHardTerminate = false;
-
-        ts.RootFolder.RegisterTaskDefinition(@"OmenSuperHub", tdBoot);
-        //Console.WriteLine("任务一已创建：系统启动时运行。");
+        // 不再创建“系统启动时以 SYSTEM 账户启动”的任务：SYSTEM 账户读的是自己的
+        // HKU\S-1-5-18\Software\OmenSuperHub（另一套配置，实测为 90 W 的极限预设），
+        // 开机后到用户登录前会把 CPU 功耗和 Tpp 设成那套值，用户登录后 Tpp 等未设置的项也不会被改回。
+        // 旧版本留下的该任务一律删除，开机后由下面的登录任务启动。
+        if (ts.FindTask("OmenSuperHub") != null) {
+          ts.RootFolder.DeleteTask("OmenSuperHub");
+          Logger.Info("SYSTEM acilis gorevi (OmenSuperHub) silindi; OSH oturum acilisinda baslar");
+        }
 
         // ── 任务二：用户登录时重启────────────────────────
         TaskDefinition tdLogon = ts.NewTask();
@@ -1301,6 +1289,7 @@ namespace OmenSuperHub {
           int value = int.Parse(tppSnapshot.Replace(" W", "").Trim());
           if (value >= 20 && value <= 254) {
             SetConcurrentTdp((byte)value);
+            Logger.Info($"Tpp (Dynamic Boost esigi) uygulandi: {value} W");
             if (tppTrackBar != null) tppTrackBar.Value = value;
             UpdateCheckedState("tppPowerGroup", Strings.SetTppSlider);
           }
@@ -1475,8 +1464,8 @@ namespace OmenSuperHub {
 
           customIcon = (string)key.GetValue("CustomIcon", "original");
           switch (customIcon) {
-            case "original": trayIcon.Icon = Properties.Resources.smallfan; UpdateCheckedState("customIconGroup", Strings.IconOriginal); break;
-            case "custom": SetCustomIcon(); UpdateCheckedState("customIconGroup", Strings.IconCustom); break;
+            case "original": HideGpuTrayIcon(true); trayIcon.Icon = Properties.Resources.smallfan; UpdateCheckedState("customIconGroup", Strings.IconOriginal); break;
+            case "custom": HideGpuTrayIcon(true); SetCustomIcon(); UpdateCheckedState("customIconGroup", Strings.IconCustom); break;
             case "dynamic": UpdateDynamicIcon(); UpdateCheckedState("customIconGroup", Strings.IconDynamic); break;
           }
 

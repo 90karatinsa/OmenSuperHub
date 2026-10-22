@@ -694,6 +694,120 @@
         $"实测最高转速: {fans} ({date})", $"實測最高轉速: {fans} ({date})", $"Measured max: {fans} ({date})", $"Ölçülen tavan: {fans} ({date})");
 
     // ─────────────────────────────────────────────────────────────────────────
+    // eGPU 风扇（NVAPI）
+    // ─────────────────────────────────────────────────────────────────────────
+    public static string EgpuFanMenu => T("eGPU 风扇", "eGPU 風扇", "eGPU Fan", "eGPU Fanı");
+    public static string EgpuFanAuto => T("自动（驱动曲线）", "自動（驅動曲線）", "Auto (driver curve)", "Otomatik (sürücü eğrisi)");
+    public static string EgpuFanAutoTip => T("退出 OSH 时也会恢复为自动。", "退出 OSH 時也會恢復為自動。", "Also restored when OSH exits.", "OSH kapanırken de otomatiğe döner.");
+    public static string EgpuFanMax => T("最大 (100%)", "最大 (100%)", "Maximum (100%)", "Maksimum (%100)");
+    public static string EgpuFanSlider => T("拖动滑块设置转速 (%)", "拖動滑桿設定轉速 (%)", "Drag slider to set speed (%)", "Hızı ayarlamak için kaydırıcıyı sürükleyin (%)");
+    public static string EgpuFanStatus(string gpu, int temp, int rpm, int level, string mode) => T(
+        $"{gpu}: {temp}°C, {rpm} RPM, {level}%（{mode}）",
+        $"{gpu}: {temp}°C, {rpm} RPM, {level}%（{mode}）",
+        $"{gpu}: {temp}°C, {rpm} RPM, {level}% ({mode})",
+        $"{gpu}: {temp}°C, {rpm} RPM, %{level} ({mode})");
+    public static string EgpuFanModeAuto => T("自动", "自動", "auto", "otomatik");
+    public static string EgpuFanModeManual => T("手动", "手動", "manual", "manuel");
+    public static string EgpuFanModeCurve => T("曲线", "曲線", "curve", "eğri");
+
+    // 简单风扇曲线编辑器（笔记本风扇与 eGPU 风扇共用）
+    public static string FanCurveSimpleMenu => T("风扇曲线（图表）…", "風扇曲線（圖表）…", "Fan curve (graph)…", "Fan eğrisi (grafik)…");
+    public static string FanCurveTempAxisSimple => T("温度 (°C)", "溫度 (°C)", "Temperature (°C)", "Sıcaklık (°C)");
+    public static string FanCurveApplyButton => T("应用", "套用", "Apply", "Uygula");
+    public static string FanCurveDefaultButton => T("默认", "預設", "Default", "Varsayılan");
+    public static string FanCurveCloseButton => T("关闭", "關閉", "Close", "Kapat");
+    public static string FanCurveAppliedNote => T("✓ 已应用。", "✓ 已套用。", "✓ Applied.", "✓ Uygulandı.");
+    public static string FanCurveLiveNone => T("读取不到温度", "讀取不到溫度", "Temperature not available", "Sıcaklık okunamıyor");
+    public static string FanCurveLiveTarget(string value) => T($" · 曲线目标 {value}", $" · 曲線目標 {value}", $" · curve target {value}", $" · eğrideki hedef {value}");
+
+    // 风扇档位（笔记本 + eGPU 共用）
+    public static string FanProfileMenu => T("风扇档位（笔记本 + eGPU）", "風扇檔位（筆電 + eGPU）", "Fan profile (laptop + eGPU)", "Fan profili (dizüstü + eGPU)");
+    public static string FanProfileAggressive => T("激进", "激進", "Aggressive", "Agresif");
+    public static string FanProfileNormal => T("普通", "普通", "Normal", "Normal");
+    public static string FanProfileSilent => T("安静", "安靜", "Silent", "Sessiz");
+    public static string FanProfileAggressiveTip => T("风扇提前、快速升速：温度最低，噪音最大。", "風扇提前、快速升速：溫度最低，噪音最大。",
+        "Fans ramp early and fast: coolest, loudest.", "Fanlar erken ve hızlı yükselir: en serin, en gürültülü.");
+    public static string FanProfileNormalTip => T("均衡。", "均衡。", "Balanced.", "Dengeli.");
+    public static string FanProfileSilentTip => T("风扇较晚升速：更安静，温度更高（高温时仍会全速）。", "風扇較晚升速：更安靜，溫度更高（高溫時仍會全速）。",
+        "Fans ramp late: quieter, warmer (still full speed when hot).", "Fanlar geç yükselir: daha sessiz, daha sıcak (çok ısınınca yine tam devir).");
+    public static string FanProfileAppliedText(string name, bool egpu) => T(
+        $"已切换到“{name}”：笔记本风扇{(egpu ? "和 eGPU 风扇" : "")}按该曲线运行。",
+        $"已切換到「{name}」：筆電風扇{(egpu ? "和 eGPU 風扇" : "")}依該曲線運轉。",
+        $"Switched to {name}: laptop fans{(egpu ? " and eGPU fans" : "")} follow this curve.",
+        $"{name} profiline geçildi: dizüstü fanları{(egpu ? " ve eGPU fanı" : "")} bu eğriyi izliyor.");
+
+    // 笔记本风扇曲线
+    public static string LaptopFanCurveTitle => T("风扇曲线", "風扇曲線", "Fan Curve", "Fan Eğrisi");
+    public static string LaptopFanCurveHint => T(
+        "拖动蓝色圆点：横向为温度（CPU 和 GPU 中较热的那个），纵向为风扇转速。红点是当前状态。点击“应用”后风扇控制切换为“自动”并按这条曲线运行。",
+        "拖曳藍色圓點：橫向為溫度（CPU 與 GPU 中較熱的那個），縱向為風扇轉速。紅點是目前狀態。按「套用」後風扇控制切換為「自動」並依這條曲線運轉。",
+        "Drag the blue dots: across is temperature (the hotter of CPU and GPU), up is fan speed. The red dot is the current state. Apply switches fan control to Auto following this curve.",
+        "Mavi noktaları sürükleyin: yatay sıcaklık (CPU ve GPU'dan sıcak olanı), dikey fan devri. Kırmızı nokta şu anki durum. Uygula'ya basınca fan kontrolü Otomatik'e geçer ve bu eğriyi izler.");
+    public static string LaptopFanCurveAxis => T("风扇转速 (RPM)", "風扇轉速 (RPM)", "Fan speed (RPM)", "Fan devri (RPM)");
+    public static string LaptopFanCurveLiveNow(string cpuTemp, string gpuTemp, int fan1, int fan2) => T(
+        $"当前：CPU {cpuTemp}°C · GPU {gpuTemp}°C · 风扇 {fan1} / {fan2} RPM",
+        $"目前：CPU {cpuTemp}°C · GPU {gpuTemp}°C · 風扇 {fan1} / {fan2} RPM",
+        $"Now: CPU {cpuTemp}°C · GPU {gpuTemp}°C · fans {fan1} / {fan2} RPM",
+        $"Şu an: CPU {cpuTemp}°C · GPU {gpuTemp}°C · fanlar {fan1} / {fan2} RPM");
+
+    // eGPU 风扇曲线
+    public static string EgpuFanCurveTitle => T("eGPU 风扇曲线", "eGPU 風扇曲線", "eGPU Fan Curve", "eGPU Fan Eğrisi");
+    public static string EgpuFanCurveHint => T(
+        "拖动蓝色圆点：横向为温度，纵向为风扇转速。红点是当前状态。85°C 以上为安全起见风扇固定 100%。",
+        "拖曳藍色圓點：橫向為溫度，縱向為風扇轉速。紅點是目前狀態。85°C 以上為安全起見風扇固定 100%。",
+        "Drag the blue dots: across is temperature, up is fan speed. The red dot is the current state. Above 85°C the fan is held at 100% for safety.",
+        "Mavi noktaları sürükleyin: yatay sıcaklık, dikey fan hızı. Kırmızı nokta kartın şu anki durumu. 85°C üstünde güvenlik için fan %100'de tutulur.");
+    public static string EgpuFanCurveFanAxis => T("风扇 (%)", "風扇 (%)", "Fan (%)", "Fan (%)");
+    public static string EgpuFanCurveLiveNow(int temp, int level, int rpm) => T(
+        $"当前：{temp}°C · 风扇 {level}%（{rpm} RPM）",
+        $"目前：{temp}°C · 風扇 {level}%（{rpm} RPM）",
+        $"Now: {temp}°C · fan {level}% ({rpm} RPM)",
+        $"Şu an: {temp}°C · fan %{level} ({rpm} RPM)");
+    public static string EgpuFanUnavailable => T("未检测到可控风扇的 eGPU", "未偵測到可控風扇的 eGPU", "No eGPU with controllable fans", "Fanı kontrol edilebilen eGPU yok");
+    public static string EgpuFanGuardTitle => T("eGPU 过热保护", "eGPU 過熱保護", "eGPU heat guard", "eGPU ısı koruması");
+    public static string EgpuFanGuardText(float temp) => T(
+        $"eGPU 达到 {temp:F0}°C，风扇已临时调到 100%。降温后恢复你的设置。",
+        $"eGPU 達到 {temp:F0}°C，風扇已臨時調到 100%。降溫後恢復你的設定。",
+        $"eGPU reached {temp:F0}°C; fans temporarily set to 100%. Your setting returns once it cools down.",
+        $"eGPU {temp:F0}°C'ye ulaştı; fanlar geçici olarak %100'e alındı. Soğuyunca ayarınız geri gelir.");
+
+    // 笔记本独显最大功率（cTGP + PPAB + Tpp 最大）
+    public static string GpuCeilingStatus(int ceiling, int max, int draw) => T(
+        $"GPU 功率上限：{ceiling} W（最高 {max} W）· 当前 {draw} W",
+        $"GPU 功率上限：{ceiling} W（最高 {max} W）· 目前 {draw} W",
+        $"GPU power ceiling: {ceiling} W (max {max} W) · now {draw} W",
+        $"GPU güç tavanı: {ceiling} W (maks {max} W) · şu an {draw} W");
+    public static string GpuCeilingUnknown => T("GPU 功率上限：读取中…", "GPU 功率上限：讀取中…", "GPU power ceiling: reading…", "GPU güç tavanı: okunuyor…");
+    public static string GpuMaxPowerApply => T("⚡ GPU 最大功率", "⚡ GPU 最大功率", "⚡ Max GPU power", "⚡ GPU'yu maksimum güce aç");
+    public static string GpuMaxPowerTip => T(
+        "开启 cTGP 和 PPAB，dState 设为标准，并把 Dynamic Boost 门槛（Tpp）调到最高（254 W），CPU 有负载时 GPU 也能获得额外功率。",
+        "開啟 cTGP 和 PPAB，dState 設為標準，並把 Dynamic Boost 門檻（Tpp）調到最高（254 W），CPU 有負載時 GPU 也能獲得額外功率。",
+        "Turns on cTGP and PPAB, sets dState to standard and raises the Dynamic Boost threshold (Tpp) to 254 W, so the GPU gets its extra power even while the CPU is busy.",
+        "cTGP ve PPAB'yi açar, dState'i standarda alır ve Dynamic Boost eşiğini (Tpp) en yükseğe (254 W) çeker; böylece CPU yüklüyken de GPU ek gücü alır.");
+    public static string GpuMaxPowerDone(int max) => T(
+        $"已设为最大：负载时 GPU 功率上限最高可达 {max} W。",
+        $"已設為最大：負載時 GPU 功率上限最高可達 {max} W。",
+        $"Set to maximum: under load the GPU ceiling can reach {max} W.",
+        $"Maksimuma ayarlandı: yük altında GPU tavanı {max} W'a kadar çıkabilir.");
+
+    // eGPU 功率限制（nvidia-smi -pl）
+    public static string EgpuPowerMenu => T("eGPU 功率限制", "eGPU 功率限制", "eGPU Power Limit", "eGPU Güç Sınırı");
+    public static string EgpuPowerDefault(int w) => T($"默认 ({w} W)", $"預設 ({w} W)", $"Default ({w} W)", $"Varsayılan ({w} W)");
+    public static string EgpuPowerDefaultTip => T("恢复显卡默认功率限制，之后 OSH 不再接管。", "恢復顯示卡預設功率限制，之後 OSH 不再接管。",
+        "Restores the card's default limit; OSH stops managing it.", "Kartın varsayılan sınırına döner; OSH artık karışmaz.");
+    public static string EgpuPowerMax(int w) => T($"最大 ({w} W)", $"最大 ({w} W)", $"Maximum ({w} W)", $"Maksimum ({w} W)");
+    public static string EgpuPowerSlider => T("拖动滑块设置功率限制 (W)", "拖動滑桿設定功率限制 (W)", "Drag slider to set power limit (W)", "Güç sınırını ayarlamak için kaydırıcıyı sürükleyin (W)");
+    public static string EgpuPowerStatus(string gpu, int limit, int draw, int min, int max) => T(
+        $"{gpu}: 限制 {limit} W，当前 {draw} W（范围 {min}–{max} W）",
+        $"{gpu}: 限制 {limit} W，目前 {draw} W（範圍 {min}–{max} W）",
+        $"{gpu}: limit {limit} W, drawing {draw} W (range {min}–{max} W)",
+        $"{gpu}: sınır {limit} W, şu an {draw} W (aralık {min}–{max} W)");
+    public static string EgpuPowerApplyFailed(string msg) => T(
+        $"eGPU 功率限制设置失败：{msg}", $"eGPU 功率限制設定失敗：{msg}", $"eGPU power limit failed: {msg}", $"eGPU güç sınırı uygulanamadı: {msg}");
+    public static string EgpuFanApplyFailed(string msg) => T(
+        $"eGPU 风扇设置失败：{msg}", $"eGPU 風扇設定失敗：{msg}", $"eGPU fan setting failed: {msg}", $"eGPU fan ayarı uygulanamadı: {msg}");
+
+    // ─────────────────────────────────────────────────────────────────────────
     // 错误/警告对话框
     // ─────────────────────────────────────────────────────────────────────────
     // ─────────────────────────────────────────────────────────────────────────

@@ -172,8 +172,8 @@ namespace OmenSuperHub {
       new ConflictDef { Name = "MSI Center", Processes = new[] { "MSI Center", "MSI.CentralServer", "MSI_Central_Service", "MSI.TerminalServer" } },
       new ConflictDef { Name = "OmenCore", Processes = new[] { "OmenCore", "OmenCore.HardwareWorker" } },
       new ConflictDef { Name = "OmenMon", Processes = new[] { "OmenMon" } },
-      // 只有 OSH 自身也在设置 GPU 超频时，两者才会争抢同一组时钟偏移
-      new ConflictDef { Name = "MSI Afterburner", Processes = new[] { "MSIAfterburner" }, OnlyWhen = () => gpuCoreOverclock > 0 || gpuMemoryOverclock > 0 },
+      // 只有 OSH 自身也在设置 GPU 超频或 eGPU 风扇时，两者才会争抢同一组时钟偏移 / 风扇档位
+      new ConflictDef { Name = "MSI Afterburner", Processes = new[] { "MSIAfterburner" }, OnlyWhen = () => gpuCoreOverclock > 0 || gpuMemoryOverclock > 0 || egpuFanPercent != EgpuFanAutoMode || egpuPowerLimitW > 0 },
     };
 
     static readonly object _conflictLock = new object();

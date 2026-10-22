@@ -405,6 +405,10 @@ namespace OmenSuperHub {
         fanControlTimer.Change(0, 1000);
         SaveConfig("FanControl");
       }, true));
+      // 风扇曲线（图表）：点击打开简单曲线编辑器，“应用”后切到自动 + 自定义风扇表
+      fanControlMenu.DropDownItems.Add(BuildLaptopFanCurveItem());
+      // 风扇档位：激进 / 普通 / 安静，同时作用于笔记本风扇和 eGPU 风扇
+      fanControlMenu.DropDownItems.Add(BuildFanProfileMenu());
       fanControlMenu.DropDownItems.Add(CreateMenuItem(Strings.FanMax, "fanControlGroup", (s, e) => {
         fanControl = "max";
         ApplyMaxFan();
@@ -449,10 +453,16 @@ namespace OmenSuperHub {
       var fanCalibrationInfo = new ToolStripMenuItem(FormatCalibrationInfo() ?? "") { Enabled = false, Visible = FormatCalibrationInfo() != null };
       fanControlMenu.DropDownItems.Add(fanCalibrationInfo);
       fanControlMenu.DropDownItems.Add(CreateMenuItem(Strings.FanCalibrateMenu, null, (s, e) => StartFanCalibration(fanControlMenu), false));
+      // eGPU 风扇（NVAPI）：仅在检测到可控风扇的外接显卡时显示
+      ToolStripMenuItem egpuFanSubMenu = BuildEgpuFanMenu();
+      fanControlMenu.DropDownItems.Add(egpuFanSeparator);
+      fanControlMenu.DropDownItems.Add(egpuFanSubMenu);
       fanControlMenu.DropDownOpening += (s, e) => {
         string info = FormatCalibrationInfo();
         fanCalibrationInfo.Text = info ?? "";
         fanCalibrationInfo.Visible = info != null;
+        RefreshEgpuFanMenu();
+        RefreshLaptopFanCurveItem();
       };
       menu.Items.Add(fanControlMenu);
 
@@ -696,6 +706,8 @@ namespace OmenSuperHub {
       }
 
       ToolStripMenuItem gpuPowerMenu = new ToolStripMenuItem(Strings.GpuPowerControlMenu);
+      // 一键最大 GPU 功率 + 当前功率上限显示
+      if (hasNVIDIAGpu) AddGpuMaxPowerItems(gpuPowerMenu);
 
       ToolStripMenuItem tgpMenu = new ToolStripMenuItem("Tgp");
       tgpMenu.DropDownItems.Add(new ToolStripMenuItem(Strings.PerfTgpTip) { Enabled = false });
@@ -781,6 +793,8 @@ namespace OmenSuperHub {
       gpuPowerMenu.DropDownItems.Add(dStateMenu);
 
       performanceControlMenu.DropDownItems.Add(gpuPowerMenu);
+      // eGPU 功率限制：仅在检测到功率限制可调的外接显卡时显示
+      performanceControlMenu.DropDownItems.Add(BuildEgpuPowerMenu());
       if (hasNVIDIAGpu) {
         ToolStripMenuItem gpuCoreOverclockMenu = new ToolStripMenuItem(Strings.GpuCoreOverclock);
         gpuCoreOverclockMenu.DropDownItems.Add(CreateMenuItem(Strings.NotSet, "gpuCoreOverclockGroup", (s, e) => {
@@ -1483,11 +1497,13 @@ namespace OmenSuperHub {
       ToolStripMenuItem customIconMenu = new ToolStripMenuItem(Strings.IconMenu);
       customIconMenu.DropDownItems.Add(CreateMenuItem(Strings.IconOriginal, "customIconGroup", (s, e) => {
         customIcon = "original";
+        HideGpuTrayIcon(true);
         trayIcon.Icon = Properties.Resources.smallfan;
         SaveConfig("CustomIcon");
       }, true));
       customIconMenu.DropDownItems.Add(CreateMenuItem(Strings.IconCustom, "customIconGroup", (s, e) => {
         customIcon = "custom";
+        HideGpuTrayIcon(true);
         SetCustomIcon();
         SaveConfig("CustomIcon");
       }, false));

@@ -298,6 +298,8 @@ namespace OmenSuperHub {
 
         // 立即执行一次
         optimiseSchedule();
+        InitEgpuFan();
+        InitEgpuPower();
 
         // Main loop to query CPU and GPU temperature every second
         fanControlTimer = new System.Threading.Timer((e) => {
@@ -721,11 +723,15 @@ namespace OmenSuperHub {
           if (parts.Length >= 10) {
             if (float.TryParse(parts[7], NumberStyles.Float, CultureInfo.InvariantCulture, out float te)) rawTempEGPU = te;
             if (float.TryParse(parts[8], NumberStyles.Float, CultureInfo.InvariantCulture, out float pe)) rawPowerEGPU = pe;
+            bool wasEGPU = hasEGPU;
             hasEGPU = parts[9] == "1";
             if (hasEGPU && !eGpuLogged) {
               eGpuLogged = true;
               Logger.Info($"eGPU algilandi: eGPU {rawTempEGPU:F0}C {rawPowerEGPU:F0}W | dahili GPU {rawTempGPU:F0}C {rawPowerGPU:F0}W");
             }
+            // eGPU（重新）出现时重新检测其风扇，例如驱动重启或掉线恢复之后
+            if (hasEGPU && !wasEGPU && !egpuFanAvailable) DetectEgpuFan("eGPU algilandi");
+            if (hasEGPU && !wasEGPU) CheckEgpuPower("eGPU algilandi");
           } else {
             hasEGPU = false;
           }
@@ -821,6 +827,10 @@ namespace OmenSuperHub {
     static void optimiseSchedule() {
       // 启动时及之后每 30 秒检查一次冲突软件
       CheckConflicts();
+      // 用户设定了 eGPU 功率限制时，每 30 秒校验一次（驱动重载/其他软件可能把它改回去）
+      if (egpuPowerLimitW > 0 && egpuPowerAvailable) CheckEgpuPower("periyodik");
+      // 内置 GPU 有负载时记录功率上限的变化（确认 Dynamic Boost 是否把上限提到最高）
+      if (hasNVIDIAGpu && monitorGPU && rawGotGPU && rawPowerGPU > 30) QueryGpuCeiling("yuk");
 
       // 延时等待风扇恢复响应
       if (flagStart < 5 && !fanCalibrating) {
@@ -990,22 +1000,83 @@ namespace OmenSuperHub {
     }
 
     // 根据当前监控状态决定动态图标显示内容：
-    // CPU监控开 → CPU温度；CPU关GPU开 → GPU温度；均关 → 原版图标（不改 customIcon 设置）
+    // CPU、GPU 监控都开 → 两个托盘图标（棕色 CPU 温度 + 蓝色 GPU 温度；16px 的单个图标塞不下四位数字）；
+    // 只开一个 → 单个温度；均关 → 原版图标（不改 customIcon 设置）
     static void UpdateDynamicIcon() {
       if (customIcon != "dynamic") return;
       if (trayIcon?.ContextMenuStrip != null && trayIcon.ContextMenuStrip.Visible) return;
-      if (monitorCPU) {
-        GenerateDynamicIcon((int)CPUTemp);
+      if (monitorCPU && monitorGPU) {
+        GenerateDynamicIcon(trayIcon, ((int)CPUTemp).ToString("00"), Brushes.Tan);
+        // GPU 图标一旦创建就保留：每次销毁重建都会被 Windows 重新塞进溢出区。独显休眠/无读数时显示 "--"
+        EnsureGpuTrayIcon();
+        NotifyIcon gpuIcon = gpuTrayIcon;
+        if (gpuIcon != null) GenerateDynamicIcon(gpuIcon, gpuTempReady ? ((int)GPUTemp).ToString("00") : "--", gpuIconBrush);
+      } else if (monitorCPU) {
+        HideGpuTrayIcon(false);
+        GenerateDynamicIcon(trayIcon, ((int)CPUTemp).ToString("00"), Brushes.Tan);
       } else if (monitorGPU) {
-        GenerateDynamicIcon((int)GPUTemp);
+        HideGpuTrayIcon(false);
+        GenerateDynamicIcon(trayIcon, gpuTempReady ? ((int)GPUTemp).ToString("00") : "--", gpuIconBrush);
       } else {
+        HideGpuTrayIcon(false);
         trayIcon.Icon = Properties.Resources.smallfan;
       }
     }
 
+    // 第二个托盘图标（GPU 温度）。NotifyIcon 必须在 UI 线程创建/销毁，否则收不到鼠标消息。
+    // Windows 11 会把新图标先放进溢出区（^），用户需在任务栏设置里打开或拖到任务栏上一次。
+    static NotifyIcon gpuTrayIcon;
+    static volatile bool gpuTrayIconPending = false;
+    static readonly Brush gpuIconBrush = new SolidBrush(Color.FromArgb(135, 206, 250));
+
+    static void EnsureGpuTrayIcon() {
+      if (gpuTrayIcon != null || gpuTrayIconPending) return;
+      gpuTrayIconPending = true;
+      Action create = () => {
+        try {
+          if (gpuTrayIcon == null) {
+            gpuTrayIcon = new NotifyIcon {
+              Icon = Properties.Resources.smallfan,
+              ContextMenuStrip = trayIcon.ContextMenuStrip,
+              Text = "GPU",
+              Visible = true
+            };
+            gpuTrayIcon.MouseClick += TrayIcon_MouseClick;
+            Logger.Info("GPU tepsi simgesi olusturuldu");
+          }
+        } catch (Exception ex) {
+          Logger.Error($"GPU tepsi simgesi olusturulamadi: {ex.Message}");
+        } finally {
+          gpuTrayIconPending = false;
+        }
+      };
+      if (uiContext != null) uiContext.Post(_ => create(), null);
+      else create();
+    }
+
+    /// <summary>移除 GPU 托盘图标。sync=true 时在当前（UI）线程立即执行，用于退出和菜单操作。</summary>
+    static void HideGpuTrayIcon(bool sync) {
+      NotifyIcon icon = gpuTrayIcon;
+      if (icon == null) return;
+      gpuTrayIcon = null;
+      Action dispose = () => {
+        try {
+          Icon old = icon.Icon;
+          icon.Visible = false;
+          icon.Dispose();
+          if (old != null && old != Properties.Resources.smallfan) old.Dispose();
+          Logger.Info("GPU tepsi simgesi kaldirildi");
+        } catch (Exception ex) {
+          Logger.Error($"GPU tepsi simgesi kaldirilamadi: {ex.Message}");
+        }
+      };
+      if (!sync && uiContext != null) uiContext.Post(_ => dispose(), null);
+      else dispose();
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     extern static bool DestroyIcon(IntPtr handle);
-    static void GenerateDynamicIcon(int number) {
+    static void GenerateDynamicIcon(NotifyIcon target, string text, Brush brush) {
       // 获取系统推荐的图标尺寸（已适配 DPI）
       Size iconSize = SystemInformation.IconSize;
       int width = iconSize.Width * 2;
@@ -1016,8 +1087,6 @@ namespace OmenSuperHub {
           graphics.Clear(Color.Transparent);
           graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
 
-          string text = number.ToString("00");
-
           using (Font font = new Font("Arial", 45.5f, FontStyle.Bold)) {
             // 测量文本大小
             SizeF textSize = graphics.MeasureString(text, font);
@@ -1027,23 +1096,27 @@ namespace OmenSuperHub {
             float y = (height - textSize.Height) / 8;
 
             // 绘制文本
-            graphics.DrawString(text, font, Brushes.Tan, x, y);
+            graphics.DrawString(text, font, brush, x, y);
           }
-
-          // 转换为图标
-          IntPtr hIcon = bitmap.GetHicon();
-          Icon newIcon = Icon.FromHandle(hIcon);
-          // 替换托盘图标
-          Icon oldIcon = trayIcon.Icon;
-          trayIcon.Icon = newIcon;
-          // 如果旧图标不是默认图标，则显式释放
-          if (oldIcon != null && oldIcon != Properties.Resources.smallfan) {
-            oldIcon.Dispose();
-          }
-          // 销毁旧句柄（注意：不能直接销毁，因为 Icon.FromHandle 需要手动释放）
-          DestroyIcon(hIcon);
         }
+        ApplyTrayIconBitmap(target, bitmap);
       }
+    }
+
+    /// <summary>把位图转成托盘图标并替换旧图标，释放旧图标和句柄。</summary>
+    static void ApplyTrayIconBitmap(NotifyIcon target, Bitmap bitmap) {
+      // 转换为图标
+      IntPtr hIcon = bitmap.GetHicon();
+      Icon newIcon = Icon.FromHandle(hIcon);
+      // 替换托盘图标
+      Icon oldIcon = target.Icon;
+      target.Icon = newIcon;
+      // 如果旧图标不是默认图标，则显式释放
+      if (oldIcon != null && oldIcon != Properties.Resources.smallfan) {
+        oldIcon.Dispose();
+      }
+      // 销毁旧句柄（注意：不能直接销毁，因为 Icon.FromHandle 需要手动释放）
+      DestroyIcon(hIcon);
     }
 
 
@@ -1566,6 +1639,8 @@ namespace OmenSuperHub {
           var eParts = new List<string>();
           if (showGPUTemp) eParts.Add($"{rawTempEGPU:F0}°C");
           if (showGPUPower) eParts.Add($"{rawPowerEGPU:F0}W");
+          // 风扇转速只在托盘提示里显示；悬浮窗里不显示（用户反馈太碍眼）
+          if (monitorFan && egpuFanRpm > 0) eParts.Add($"{egpuFanRpm}rpm");
           lines.Add($"eGPU {string.Join(" ", eParts)}");
         }
       }
@@ -1630,6 +1705,15 @@ namespace OmenSuperHub {
       // 最终防线：即使未来格式化逻辑发生变化，也不允许 NotifyIcon.Text 超限。
       text = EllipsizeUnicode(text, NotifyIconTextLimit);
       trayIcon.Text = text;
+
+      // GPU 图标的提示：只放 GPU 相关读数
+      NotifyIcon gpuIcon = gpuTrayIcon;
+      if (gpuIcon != null) {
+        string gpuText = $"GPU {GPUTemp:F0}°C, {GPUPower:F0}W";
+        if (GPUFrequency > 0) gpuText += $", {GPUFrequency:F0}MHz";
+        if (hasEGPU) gpuText += $"\neGPU {rawTempEGPU:F0}°C, {rawPowerEGPU:F0}W";
+        gpuIcon.Text = EllipsizeUnicode(gpuText, NotifyIconTextLimit);
+      }
     }
 
     static void Exit() {
@@ -1641,6 +1725,8 @@ namespace OmenSuperHub {
       tooltipUpdateTimer.Stop(); // 停止定时器
 
       //openComputer.Close();
+      HideGpuTrayIcon(true);
+      RestoreEgpuFanOnExit();
       StopHardwareMonitor();
       Application.Exit();
     }

@@ -26,7 +26,7 @@ namespace OmenSuperHub {
     /// NVAPI 的枚举顺序不固定，外接显卡可能排在第一位，直接取 [0] 会把超频等设置施加到 eGPU 上。
     /// 规则：优先名称含 "Laptop" 的 GPU（NVIDIA 移动版命名），否则退回第一块。
     /// </summary>
-    static PhysicalGPU PickInternalGpu(PhysicalGPU[] gpus) {
+    internal static PhysicalGPU PickInternalGpu(PhysicalGPU[] gpus) {
       if (gpus == null || gpus.Length == 0)
         throw new Exception("未找到 GPU");
       foreach (var g in gpus) {
@@ -372,21 +372,48 @@ namespace OmenSuperHub {
       return limits;
     }
 
+    // 接有外接显卡（eGPU）时，nvidia-smi 不带 -i 会同时作用于所有 GPU，因此时钟锁定只指向笔记本自身的独显
+    static string internalNvidiaBusId;
+    static bool internalNvidiaBusIdQueried;
+
+    /// <summary>笔记本自身 NVIDIA 独显的 PCI 总线号（名称含 "Laptop"，或只有一块 GPU 时取该块）；查不到返回 null。</summary>
+    public static string GetInternalNvidiaBusId() {
+      if (internalNvidiaBusIdQueried) return internalNvidiaBusId;
+      ProcessResult r = ExecuteCommand("nvidia-smi --query-gpu=pci.bus_id,name --format=csv,noheader");
+      if (r.ExitCode != 0) return null;   // 下次再试
+      string[] lines = r.Output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+      string found = null;
+      foreach (string line in lines) {
+        string[] p = line.Split(',');
+        if (p.Length >= 2 && p[1].IndexOf("Laptop", StringComparison.OrdinalIgnoreCase) >= 0) { found = p[0].Trim(); break; }
+      }
+      if (found == null && lines.Length == 1) found = lines[0].Split(',')[0].Trim();
+      internalNvidiaBusId = found;
+      internalNvidiaBusIdQueried = true;
+      return found;
+    }
+
+    /// <summary>nvidia-smi 的目标参数（"-i 总线号 "），查不到内置 GPU 时为空（作用于全部 GPU，与旧行为一致）。</summary>
+    public static string NvSmiInternalTarget() {
+      string id = GetInternalNvidiaBusId();
+      return id != null ? $"-i {id} " : "";
+    }
+
     // 设置显卡频率限制
     public static void SetGPUClockLimit(int freq) {
-      ExecuteCommand("nvidia-smi --lock-gpu-clocks=0," + freq);
+      ExecuteCommand($"nvidia-smi {NvSmiInternalTarget()}--lock-gpu-clocks=0,{freq}");
     }
 
     public static void SetGPUClockReset() {
-      ExecuteCommand("nvidia-smi --reset-gpu-clocks");
+      ExecuteCommand($"nvidia-smi {NvSmiInternalTarget()}--reset-gpu-clocks");
     }
 
     public static void SetMemoryClockLimit(int freq) {
-      ExecuteCommand("nvidia-smi --lock-memory-clocks=0," + freq);
+      ExecuteCommand($"nvidia-smi {NvSmiInternalTarget()}--lock-memory-clocks=0,{freq}");
     }
 
     public static void SetMemoryClockReset() {
-      ExecuteCommand("nvidia-smi --reset-memory-clocks");
+      ExecuteCommand($"nvidia-smi {NvSmiInternalTarget()}--reset-memory-clocks");
     }
 
     public static int GetGpuTemperatureTarget() {
