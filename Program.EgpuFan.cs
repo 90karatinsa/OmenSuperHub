@@ -19,9 +19,10 @@ namespace OmenSuperHub {
     const int EgpuFanAutoMode = -1;
     const int EgpuFanCurveMode = -2;
     static int egpuFanPercent = EgpuFanAutoMode;
-    // 风扇曲线（X = 温度 °C，Y = 风扇 %）。降温时按“温度 + 滞后”取值，避免风扇在两档之间来回跳
+    // 风扇曲线（X = 温度 °C，Y = 风扇 %）。降温时按“温度 + 滞后”取值，避免风扇在两档之间来回跳。
+    // 低于显卡手动最低转速（3090 为 30%）的部分视为“停转区”：交还驱动自动控制，低温时风扇停转（与原厂行为一致）。
     static readonly List<Point> EgpuFanDefaultCurve = new List<Point> {
-      new Point(30, 30), new Point(50, 40), new Point(60, 50), new Point(70, 65), new Point(78, 80), new Point(85, 100)
+      new Point(45, 0), new Point(55, 35), new Point(63, 50), new Point(70, 65), new Point(78, 85), new Point(85, 100)
     };
     static List<Point> egpuFanCurve = new List<Point>(EgpuFanDefaultCurve);
     const int EgpuFanCurveHysteresis = 3;
@@ -113,20 +114,27 @@ namespace OmenSuperHub {
         info.SetCoolerSettings(c.CoolerId, CoolerPolicy.Manual, level);
     }
 
+    /// <summary>曲线在该温度的档位；低于手动最低转速时返回 0，表示交还驱动（低温时风扇停转）。</summary>
+    static int EgpuCurveLevel(int temperature) {
+      int v = SimpleFanCurveForm.Evaluate(egpuFanCurve, temperature, 0, 100);
+      return v < egpuFanMinPercent ? 0 : v;
+    }
+
     /// <summary>曲线模式：按当前温度计算目标档位（含滞后与 85°C 安全上限），与上次写入不同时才写入。调用方持有 egpuFanLock。</summary>
     static void ApplyEgpuFanCurveStep(PhysicalGPU gpu, string reason) {
       int t = egpuTempC;
       if (t <= 0) return;
-      int up = SimpleFanCurveForm.Evaluate(egpuFanCurve, t, egpuFanMinPercent, 100);
-      int down = SimpleFanCurveForm.Evaluate(egpuFanCurve, t + EgpuFanCurveHysteresis, egpuFanMinPercent, 100);
+      int up = EgpuCurveLevel(t);
+      int down = EgpuCurveLevel(t + EgpuFanCurveHysteresis);
       if (t >= EgpuFanGuardTemp) up = down = 100;
       int target = egpuCurveApplied;
       if (egpuCurveApplied < 0 || up > egpuCurveApplied) target = up;
       else if (down < egpuCurveApplied) target = down;
       if (target == egpuCurveApplied) return;
-      SetEgpuCoolers(gpu, target);
-      if (egpuCurveApplied < 0 || reason != null)
-        Logger.Info($"eGPU fan egrisi ({reason ?? "sicaklik"}): {t}C -> %{target}");
+      if (target == 0) gpu.CoolerInformation.RestoreCoolerSettingsToDefault();   // 停转区：交还驱动
+      else SetEgpuCoolers(gpu, target);
+      if (egpuCurveApplied < 0 || reason != null || target == 0 || egpuCurveApplied == 0)
+        Logger.Info($"eGPU fan egrisi ({reason ?? "sicaklik"}): {t}C -> {(target == 0 ? "durma bolgesi (surucu)" : "%" + target)}");
       egpuCurveApplied = target;
     }
 
@@ -175,6 +183,15 @@ namespace OmenSuperHub {
     static void InitEgpuFan() {
       egpuFanPercent = ReadEgpuFanPercent();
       egpuFanCurve = ReadEgpuFanCurve();
+      // 选的是风扇档位时，曲线始终取该档位当前的定义（档位曲线更新后自动生效；手动调过的曲线不受影响）
+      if (egpuFanPercent == EgpuFanCurveMode && FanProfileKeys.Contains(fanProfile)) {
+        List<Point> profileCurve = EgpuProfileCurve(fanProfile);
+        if (FormatEgpuFanCurve(profileCurve) != FormatEgpuFanCurve(egpuFanCurve)) {
+          egpuFanCurve = profileCurve;
+          SaveEgpuFanCurve();
+          Logger.Info($"eGPU fan egrisi '{fanProfile}' profilinin guncel tanimina cekildi: {FormatEgpuFanCurve(profileCurve)}");
+        }
+      }
       DetectEgpuFan("baslangic");
     }
 
@@ -379,10 +396,11 @@ namespace OmenSuperHub {
         Title = $"{Strings.EgpuFanCurveTitle} — {egpuFanGpuName}",
         Hint = Strings.EgpuFanCurveHint,
         ValueAxisTitle = Strings.EgpuFanCurveFanAxis,
-        ValueMin = egpuFanMinPercent,
+        ValueMin = 0,
+        StopBelow = egpuFanMinPercent,
         ValueMax = 100,
         ValueInterval = 10,
-        FormatValue = v => Strings.Current == AppLanguage.Turkish ? $"%{v}" : $"{v}%",
+        FormatValue = v => v == 0 ? Strings.FanCurveStopValue : Strings.Current == AppLanguage.Turkish ? $"%{v}" : $"{v}%",
         Points = egpuFanCurve,
         Defaults = EgpuFanDefaultCurve,
         Live = () => new SimpleFanCurveForm.LiveState {

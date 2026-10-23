@@ -718,6 +718,8 @@
     public static string FanCurveCloseButton => T("关闭", "關閉", "Close", "Kapat");
     public static string FanCurveAppliedNote => T("✓ 已应用。", "✓ 已套用。", "✓ Applied.", "✓ Uygulandı.");
     public static string FanCurveLiveNone => T("读取不到温度", "讀取不到溫度", "Temperature not available", "Sıcaklık okunamıyor");
+    public static string FanCurveStopZone => T("风扇停转（交给驱动）", "風扇停轉（交給驅動）", "fan stops (driver)", "fan durur (sürücü)");
+    public static string FanCurveStopValue => T("停转", "停轉", "stop", "durur");
     public static string FanCurveLiveTarget(string value) => T($" · 曲线目标 {value}", $" · 曲線目標 {value}", $" · curve target {value}", $" · eğrideki hedef {value}");
 
     // 风扇档位（笔记本 + eGPU 共用）
@@ -758,11 +760,12 @@
         "Drag the blue dots: across is temperature, up is fan speed. The red dot is the current state. Above 85°C the fan is held at 100% for safety.",
         "Mavi noktaları sürükleyin: yatay sıcaklık, dikey fan hızı. Kırmızı nokta kartın şu anki durumu. 85°C üstünde güvenlik için fan %100'de tutulur.");
     public static string EgpuFanCurveFanAxis => T("风扇 (%)", "風扇 (%)", "Fan (%)", "Fan (%)");
-    public static string EgpuFanCurveLiveNow(int temp, int level, int rpm) => T(
-        $"当前：{temp}°C · 风扇 {level}%（{rpm} RPM）",
-        $"目前：{temp}°C · 風扇 {level}%（{rpm} RPM）",
-        $"Now: {temp}°C · fan {level}% ({rpm} RPM)",
-        $"Şu an: {temp}°C · fan %{level} ({rpm} RPM)");
+    public static string EgpuFanCurveLiveNow(int temp, int level, int rpm) => rpm <= 0
+      ? T($"当前：{temp}°C · 风扇停转", $"目前：{temp}°C · 風扇停轉", $"Now: {temp}°C · fan stopped", $"Şu an: {temp}°C · fan durdu")
+      : T($"当前：{temp}°C · 风扇 {level}%（{rpm} RPM）",
+          $"目前：{temp}°C · 風扇 {level}%（{rpm} RPM）",
+          $"Now: {temp}°C · fan {level}% ({rpm} RPM)",
+          $"Şu an: {temp}°C · fan %{level} ({rpm} RPM)");
     public static string EgpuFanUnavailable => T("未检测到可控风扇的 eGPU", "未偵測到可控風扇的 eGPU", "No eGPU with controllable fans", "Fanı kontrol edilebilen eGPU yok");
     public static string EgpuFanGuardTitle => T("eGPU 过热保护", "eGPU 過熱保護", "eGPU heat guard", "eGPU ısı koruması");
     public static string EgpuFanGuardText(float temp) => T(

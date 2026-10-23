@@ -15,6 +15,7 @@ namespace OmenSuperHub {
     public int ValueMax;          // 纵轴最大值
     public int ValueInterval;     // 纵轴刻度
     public int ValueSnap = 1;     // 拖动时取整的步长（RPM 用 100）
+    public int StopBelow;         // >0：低于该值的区域为“风扇停转”（只能取 0 或 ≥ 该值），如 eGPU 手动最低 30%
     public Func<int, string> FormatValue;   // 60 → "%60"，4500 → "4500 RPM"
     public List<Point> Points;
     public List<Point> Defaults;
@@ -214,8 +215,14 @@ namespace OmenSuperHub {
       area.AxisY.MajorGrid.LineColor = GridColor;
       area.AxisY.LabelStyle.ForeColor = TextColor;
 
-      // 设备不允许的低速区域（如 eGPU 风扇最低 30%）用浅灰色标出
-      if (options.ValueMin > 0)
+      // 风扇停转区（低于手动最低转速时交还驱动，低温时风扇停转）或设备不允许的低速区，用浅灰色标出
+      if (options.StopBelow > 0)
+        area.AxisY.StripLines.Add(new StripLine {
+          IntervalOffset = 0, StripWidth = options.StopBelow, BackColor = FloorColor,
+          Text = Strings.FanCurveStopZone, ForeColor = Color.FromArgb(120, 120, 120),
+          TextAlignment = StringAlignment.Far, TextLineAlignment = StringAlignment.Center
+        });
+      else if (options.ValueMin > 0)
         area.AxisY.StripLines.Add(new StripLine { IntervalOffset = 0, StripWidth = options.ValueMin, BackColor = FloorColor });
 
       // 当前温度的竖线（没有读数时宽度为 0，不显示）
@@ -277,6 +284,9 @@ namespace OmenSuperHub {
     private int ClampValue(double v) {
       int snap = Math.Max(1, options.ValueSnap);
       int snapped = (int)(Math.Round(v / snap) * snap);
+      // 停转区内只能是 0（停转）或停转区上沿（最低转速）
+      if (options.StopBelow > 0 && snapped < options.StopBelow)
+        snapped = snapped < options.StopBelow / 2 ? 0 : options.StopBelow;
       return Math.Max(options.ValueMin, Math.Min(options.ValueMax, snapped));
     }
 
@@ -308,6 +318,7 @@ namespace OmenSuperHub {
       temperatureLine.IntervalOffset = t;
       temperatureLine.BorderWidth = 2;
       int target = Evaluate(GetPoints(), s.Temperature, options.ValueMin, options.ValueMax);
+      if (options.StopBelow > 0 && target < options.StopBelow) target = 0;
       string live = s.Text + Strings.FanCurveLiveTarget(options.FormatValue(target));
       statusLabel.Text = appliedNote != null ? $"{appliedNote}   {live}" : live;
       chart.Invalidate();

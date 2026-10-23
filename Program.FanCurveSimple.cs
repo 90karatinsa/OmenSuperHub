@@ -59,13 +59,13 @@ namespace OmenSuperHub {
       }
     }
 
-    /// <summary>eGPU 风扇曲线（%）。85°C 以上另有安全上限强制 100%。</summary>
+    /// <summary>eGPU 风扇曲线（%）。0 = 停转区（交还驱动，低温时风扇停转）；85°C 以上另有安全上限强制 100%。</summary>
     static List<Point> EgpuProfileCurve(string key) {
       switch (key) {
         case "aggressive":
-          return new List<Point> { new Point(30, 40), new Point(45, 50), new Point(55, 65), new Point(65, 80), new Point(72, 95), new Point(78, 100) };
+          return new List<Point> { new Point(35, 0), new Point(42, 40), new Point(52, 55), new Point(62, 75), new Point(70, 95), new Point(76, 100) };
         case "silent":
-          return new List<Point> { new Point(40, 30), new Point(55, 35), new Point(65, 45), new Point(73, 60), new Point(80, 80), new Point(85, 100) };
+          return new List<Point> { new Point(50, 0), new Point(60, 35), new Point(68, 50), new Point(75, 65), new Point(81, 85), new Point(86, 100) };
         default:
           return new List<Point>(EgpuFanDefaultCurve);
       }
