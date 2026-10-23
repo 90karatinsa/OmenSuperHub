@@ -722,6 +722,13 @@
     public static string FanCurveStopValue => T("停转", "停轉", "stop", "durur");
     public static string FanCurveLiveTarget(string value) => T($" · 曲线目标 {value}", $" · 曲線目標 {value}", $" · curve target {value}", $" · eğrideki hedef {value}");
 
+    // 精简后的顶层菜单
+    public static string FanMenuTop => T("风扇", "風扇", "Fans", "Fan");
+    public static string FanAdvanced => T("高级", "進階", "Advanced", "Gelişmiş");
+    public static string FanFixedSpeed => T("固定转速", "固定轉速", "Fixed speed", "Sabit devir");
+    public static string FanProfileBothDevices => T("同时作用于笔记本风扇和 eGPU 风扇。", "同時作用於筆電風扇和 eGPU 風扇。",
+        "Applies to the laptop fans and the eGPU fans together.", "Dizüstü ve eGPU fanlarına birlikte uygulanır.");
+
     // 风扇档位（笔记本 + eGPU 共用）
     public static string FanProfileMenu => T("风扇档位（笔记本 + eGPU）", "風扇檔位（筆電 + eGPU）", "Fan profile (laptop + eGPU)", "Fan profili (dizüstü + eGPU)");
     public static string FanProfileAggressive => T("激进", "激進", "Aggressive", "Agresif");

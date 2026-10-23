@@ -78,25 +78,25 @@ namespace OmenSuperHub {
       fanProfile == key && fanControl == "auto" && fanTable.Contains("custom")
       && (!egpuFanAvailable || egpuFanPercent == EgpuFanCurveMode);
 
-    static ToolStripMenuItem fanProfileMenu;
+    static readonly List<ToolStripMenuItem> fanProfileItems = new List<ToolStripMenuItem>();
 
-    static ToolStripMenuItem BuildFanProfileMenu() {
-      var menu = new ToolStripMenuItem(Strings.FanProfileMenu);
-      fanProfileMenu = menu;
+    /// <summary>把“激进 / 普通 / 安静”三个档位直接加在“风扇”菜单最上面（不再单独占一个子菜单）。</summary>
+    static void AddFanProfileItems(ToolStripMenuItem parent) {
+      fanProfileItems.Clear();
       foreach (string key in FanProfileKeys) {
         string k = key;
-        menu.DropDownItems.Add(CreateMenuItem(FanProfileName(k), "fanProfileGroup", (s, e) => ApplyFanProfile(k), IsFanProfileActive(k), FanProfileTip(k)));
+        var item = CreateMenuItem(FanProfileName(k), "fanProfileGroup", (s, e) => ApplyFanProfile(k), IsFanProfileActive(k),
+          $"{FanProfileTip(k)} {Strings.FanProfileBothDevices}");
+        item.Name = "FanProfile_" + k;
+        fanProfileItems.Add(item);
+        parent.DropDownItems.Add(item);
       }
-      menu.DropDownOpening += (s, e) => RefreshFanProfileMenu(menu);
-      RefreshFanProfileMenu(menu);
-      return menu;
     }
 
-    static void RefreshFanProfileMenu(ToolStripMenuItem menu) {
+    static void RefreshFanProfileItems() {
       string active = FanProfileKeys.FirstOrDefault(IsFanProfileActive);
-      foreach (ToolStripMenuItem item in menu.DropDownItems.OfType<ToolStripMenuItem>())
-        item.Checked = active != null && item.Text == FanProfileName(active);
-      menu.Text = active != null ? $"{Strings.FanProfileMenu}: {FanProfileName(active)}" : Strings.FanProfileMenu;
+      foreach (ToolStripMenuItem item in fanProfileItems)
+        item.Checked = active != null && item.Name == "FanProfile_" + active;
     }
 
     /// <summary>选择档位：笔记本风扇与 eGPU 风扇同时切到该档位的曲线。</summary>
@@ -133,7 +133,7 @@ namespace OmenSuperHub {
 
     static void RefreshLaptopFanCurveItem() {
       if (laptopFanCurveItem != null) laptopFanCurveItem.Checked = fanControl == "auto" && fanTable.Contains("custom");
-      if (fanProfileMenu != null) RefreshFanProfileMenu(fanProfileMenu);
+      RefreshFanProfileItems();
     }
 
     static void OpenLaptopFanCurveEditor() {

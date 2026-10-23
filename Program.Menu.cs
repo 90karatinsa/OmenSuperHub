@@ -192,8 +192,7 @@ namespace OmenSuperHub {
       };
       sysInfoMenu.DropDownClosed += (s, e) => { isSysInfoMenuOpen = false; };
 
-      menu.Items.Add(sysInfoMenu);
-      menu.Items.Add(new ToolStripSeparator());
+      // 系统信息放到“硬件监控”菜单里（见下方），顶层菜单保持精简
 
       // ─────────────────────────────────────────────────────────────────────────
       // 预设配置
@@ -276,7 +275,8 @@ namespace OmenSuperHub {
       menu.Items.Add(new ToolStripSeparator());
       bool isBuiltInPreset = (currentPreset == "PresetExtreme" || currentPreset == "PresetGpuPriority" || currentPreset == "PresetLightUse");
 
-      ToolStripMenuItem fanConfigMenu = new ToolStripMenuItem(Strings.FanConfig);
+      // 原“风扇配置”（风扇表、响应速度、高温保护）现为“风扇”菜单里的“高级”子菜单
+      ToolStripMenuItem fanConfigMenu = new ToolStripMenuItem(Strings.FanAdvanced);
       fanConfigMenu.DropDownItems.Add(new ToolStripMenuItem(Strings.FanCurveNote) { Enabled = false });
       var silentFanItem = new ToolStripMenuItem(Strings.FanSilentMode) {
         Tag = "fanTableGroup",
@@ -361,14 +361,14 @@ namespace OmenSuperHub {
       }, autoFanProtect == "off"));
       fanConfigMenu.DropDownItems.Add(autoFanProtectMenu);
 
-      menu.Items.Add(fanConfigMenu);
 
-      ToolStripMenuItem fanControlMenu = new ToolStripMenuItem(Strings.FanControl);
+      ToolStripMenuItem fanControlMenu = new ToolStripMenuItem(Strings.FanMenuTop);
       if (isFanCleanSupported || isFanLegacyCleanSupported) {
         string menuText = Strings.CleanCreekMenuItem;
         if (!isFanCleanSupported && isFanLegacyCleanSupported)
           menuText = Strings.CleanCreekLegacyMenuItem;
-        fanControlMenu.DropDownItems.Add(CreateMenuItem(menuText, null, (s, e) => {
+        fanConfigMenu.DropDownItems.Add(new ToolStripSeparator());
+        fanConfigMenu.DropDownItems.Add(CreateMenuItem(menuText, null, (s, e) => {
           if (MessageBox.Show(Application.OpenForms.OfType<HelpForm>().FirstOrDefault(), Strings.CleanCreekConfirmMessage, Strings.CleanCreekTitle, MessageBoxButtons.OKCancel, MessageBoxIcon.Information) == DialogResult.OK) {
             fanControlMenu.Enabled = false;
             if (isFanCleanSupported) {
@@ -397,25 +397,28 @@ namespace OmenSuperHub {
             }
           }
         }, false));
-        fanControlMenu.DropDownItems.Add(new ToolStripSeparator());
       }
-      fanControlMenu.DropDownItems.Add(CreateMenuItem(Strings.FanAuto, "fanControlGroup", (s, e) => {
+      // “自动”（按所选风扇表调速）放在“高级”的最上面，下面紧接着风扇表
+      fanConfigMenu.DropDownItems.Insert(0, CreateMenuItem(Strings.FanAuto, "fanControlGroup", (s, e) => {
         fanControl = "auto";
         SetMaxFanSpeedOff();
         fanControlTimer.Change(0, 1000);
         SaveConfig("FanControl");
       }, true));
+      fanConfigMenu.DropDownItems.Insert(1, new ToolStripSeparator());
+      // 风扇档位：激进 / 普通 / 安静，同时作用于笔记本风扇和 eGPU 风扇
+      AddFanProfileItems(fanControlMenu);
       // 风扇曲线（图表）：点击打开简单曲线编辑器，“应用”后切到自动 + 自定义风扇表
       fanControlMenu.DropDownItems.Add(BuildLaptopFanCurveItem());
-      // 风扇档位：激进 / 普通 / 安静，同时作用于笔记本风扇和 eGPU 风扇
-      fanControlMenu.DropDownItems.Add(BuildFanProfileMenu());
+      fanControlMenu.DropDownItems.Add(new ToolStripSeparator());
       fanControlMenu.DropDownItems.Add(CreateMenuItem(Strings.FanMax, "fanControlGroup", (s, e) => {
         fanControl = "max";
         ApplyMaxFan();
         fanControlTimer.Change(Timeout.Infinite, Timeout.Infinite);
         SaveConfig("FanControl");
       }, false));
-      fanControlMenu.DropDownItems.Add(CreateMenuItem(Strings.SetFanSpeedSlider, "fanControlGroup", (s, e) => { }, false));
+      ToolStripMenuItem fixedSpeedMenu = new ToolStripMenuItem(Strings.FanFixedSpeed);
+      fixedSpeedMenu.DropDownItems.Add(CreateMenuItem(Strings.SetFanSpeedSlider, "fanControlGroup", (s, e) => { }, false));
       fanTrackBar = new ToolStripTrackBar();
       fanTrackBar.Minimum = 0;
       fanTrackBar.Maximum = GetFanSliderMaxRpm() / 100;
@@ -445,18 +448,21 @@ namespace OmenSuperHub {
         SaveConfig("FanControl");
       };
 
-      fanControlMenu.DropDownItems.Add(fanTrackBar);
-      fanControlMenu.DropDownItems.Add(fanValueLabel);
+      fixedSpeedMenu.DropDownItems.Add(fanTrackBar);
+      fixedSpeedMenu.DropDownItems.Add(fanValueLabel);
+      fanControlMenu.DropDownItems.Add(fixedSpeedMenu);
 
-      // 风扇校准：测量实际最高转速，并据此设定转速滑块上限
-      fanControlMenu.DropDownItems.Add(new ToolStripSeparator());
+      // 风扇校准：测量实际最高转速，并据此设定转速滑块上限（放在“高级”里）
+      fanConfigMenu.DropDownItems.Add(new ToolStripSeparator());
       var fanCalibrationInfo = new ToolStripMenuItem(FormatCalibrationInfo() ?? "") { Enabled = false, Visible = FormatCalibrationInfo() != null };
-      fanControlMenu.DropDownItems.Add(fanCalibrationInfo);
-      fanControlMenu.DropDownItems.Add(CreateMenuItem(Strings.FanCalibrateMenu, null, (s, e) => StartFanCalibration(fanControlMenu), false));
+      fanConfigMenu.DropDownItems.Add(fanCalibrationInfo);
+      fanConfigMenu.DropDownItems.Add(CreateMenuItem(Strings.FanCalibrateMenu, null, (s, e) => StartFanCalibration(fanControlMenu), false));
       // eGPU 风扇（NVAPI）：仅在检测到可控风扇的外接显卡时显示
       ToolStripMenuItem egpuFanSubMenu = BuildEgpuFanMenu();
       fanControlMenu.DropDownItems.Add(egpuFanSeparator);
       fanControlMenu.DropDownItems.Add(egpuFanSubMenu);
+      fanControlMenu.DropDownItems.Add(new ToolStripSeparator());
+      fanControlMenu.DropDownItems.Add(fanConfigMenu);
       fanControlMenu.DropDownOpening += (s, e) => {
         string info = FormatCalibrationInfo();
         fanCalibrationInfo.Text = info ?? "";
@@ -1235,6 +1241,8 @@ namespace OmenSuperHub {
         SaveConfig("TempDisplayMode");
       }, false));
       hardwareMonitorMenu.DropDownItems.Add(tempDisplayMenu);
+      hardwareMonitorMenu.DropDownItems.Insert(0, sysInfoMenu);
+      hardwareMonitorMenu.DropDownItems.Insert(1, new ToolStripSeparator());
       menu.Items.Add(hardwareMonitorMenu);
       ToolStripMenuItem floatingBarMenu = new ToolStripMenuItem(Strings.FloatingBar);
       floatingBarMenu.DropDownItems.Add(new ToolStripMenuItem(Strings.FloatingToggleTip) { Enabled = false });
@@ -1327,7 +1335,8 @@ namespace OmenSuperHub {
         }
       };
       floatingBarMenu.DropDownItems.Add(floatingScreenMenu);
-      menu.Items.Add(floatingBarMenu);
+      hardwareMonitorMenu.DropDownItems.Add(new ToolStripSeparator());
+      hardwareMonitorMenu.DropDownItems.Add(floatingBarMenu);
       ToolStripMenuItem omenKeyMenu = new ToolStripMenuItem(Strings.OmenKeyMenu);
       omenKeyMenu.DropDownItems.Add(CreateMenuItem(Strings.OmenKeyDefault, "omenKeyGroup", (s, e) => {
         tooltipUpdateTimer.Enabled = false;
@@ -1466,7 +1475,7 @@ namespace OmenSuperHub {
         ApplyOmenKeyAction(OmenKeyActions.None);
       }, omenKey == OmenKeyActions.None));
 
-      menu.Items.Add(omenKeyMenu);
+      // Omen 键菜单放到“设置”里（见下方）
 
       ToolStripMenuItem settingMenu = new ToolStripMenuItem(Strings.OtherSettings);
       languageMenu = new ToolStripMenuItem(Strings.LanguageMenu);
@@ -1536,12 +1545,14 @@ namespace OmenSuperHub {
       }, true));
       settingMenu.DropDownItems.Add(autoStartMenu);
 
-      menu.Items.Add(settingMenu);
-
-      menu.Items.Add(new ToolStripSeparator()); // Separator between groups
-      menu.Items.Add(CreateMenuItem(Strings.Help, null, (s, e) => {
+      settingMenu.DropDownItems.Add(new ToolStripSeparator());
+      settingMenu.DropDownItems.Add(omenKeyMenu);
+      settingMenu.DropDownItems.Add(new ToolStripSeparator());
+      settingMenu.DropDownItems.Add(CreateMenuItem(Strings.Help, null, (s, e) => {
         HelpForm.Instance.Show();
       }, false));
+      menu.Items.Add(settingMenu);
+
       menu.Items.Add(new ToolStripSeparator()); // Separator between groups
       menu.Items.Add(CreateMenuItem(Strings.Exit, null, (s, e) => Exit(), false));
 
