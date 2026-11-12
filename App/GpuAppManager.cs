@@ -38,6 +38,59 @@ namespace OmenSuperHub {
       return gpus[0];
     }
 
+    /// <summary>外接显卡（eGPU）：第一块不是笔记本内置独显的 NVIDIA GPU；只有一块 GPU 时返回 null。</summary>
+    internal static PhysicalGPU PickExternalGpu(PhysicalGPU[] gpus) {
+      if (gpus == null || gpus.Length < 2) return null;
+      PhysicalGPU internalGpu = PickInternalGpu(gpus);
+      foreach (var g in gpus)
+        if (!g.Equals(internalGpu)) return g;
+      return null;
+    }
+
+    /// <summary>设置指定 GPU 的 P0 频率偏移（MHz，单个时钟域）。调用方负责 NVIDIA.Initialize。</summary>
+    internal static void SetPState20Offset(PhysicalGPU gpu, PublicClockDomain domain, int offsetMHz) {
+      var clockDelta = new PerformanceStates20ClockEntryV1(domain, new PerformanceStates20ParameterDelta(offsetMHz * 1000));
+      var pState = new PerformanceStates20InfoV1.PerformanceState20(
+          PerformanceStateId.P0_3DPerformance,
+          new PerformanceStates20ClockEntryV1[] { clockDelta },
+          new PerformanceStates20BaseVoltageEntryV1[0]);
+      GPUApi.SetPerformanceStates20(gpu.Handle, new PerformanceStates20InfoV1(new PerformanceStates20InfoV1.PerformanceState20[] { pState }, 1u, 0u));
+    }
+
+    /// <summary>读回指定 GPU 的 P0 核心/显存偏移（MHz）。调用方负责 NVIDIA.Initialize。</summary>
+    internal static void GetPState20Offsets(PhysicalGPU gpu, out int coreMHz, out int memMHz) {
+      coreMHz = 0;
+      memMHz = 0;
+      var info = GPUApi.GetPerformanceStates20(gpu.Handle);
+      if (!info.Clocks.TryGetValue(PerformanceStateId.P0_3DPerformance, out var entries)) return;
+      foreach (var c in entries) {
+        if (c.DomainId == PublicClockDomain.Graphics) coreMHz = c.FrequencyDeltaInkHz.DeltaValue / 1000;
+        else if (c.DomainId == PublicClockDomain.Memory) memMHz = c.FrequencyDeltaInkHz.DeltaValue / 1000;
+      }
+    }
+
+    // 驱动配置（DRS）设置 "CUDA - Force P2 State"（NVIDIA Profile Inspector 中的名称）：1 = 强制 P2（驱动默认），0 = 关闭。
+    // GeForce 卡上 CUDA 程序默认跑在 P2：显存比 P0 低一档，而且 P0 的显存偏移不生效。
+    const uint CudaForceP2SettingId = 0x50166C5E;
+
+    /// <summary>全局（Base Profile）是否已关闭 CUDA 强制 P2。调用方负责 NVIDIA.Initialize。</summary>
+    internal static bool IsCudaForceP2Off() {
+      using (var session = NvAPIWrapper.DRS.DriverSettingsSession.CreateAndLoad()) {
+        var setting = session.BaseProfile.Settings.FirstOrDefault(s => s.SettingId == CudaForceP2SettingId);
+        return setting != null && Convert.ToUInt32(setting.CurrentValue) == 0u;
+      }
+    }
+
+    /// <summary>off = true 写入 0（CUDA 跑 P0）；false 删除该项恢复驱动默认。需要管理员权限。调用方负责 NVIDIA.Initialize。</summary>
+    internal static void SetCudaForceP2Off(bool off) {
+      using (var session = NvAPIWrapper.DRS.DriverSettingsSession.CreateAndLoad()) {
+        var profile = session.BaseProfile;
+        if (off) profile.SetSetting(CudaForceP2SettingId, 0u);
+        else if (profile.Settings.Any(s => s.SettingId == CudaForceP2SettingId)) profile.DeleteSetting(CudaForceP2SettingId);
+        session.Save();
+      }
+    }
+
     public static void SetCoreClockOffset(int offsetMHz) {
       NVIDIA.Initialize();
 

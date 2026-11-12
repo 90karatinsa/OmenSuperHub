@@ -30,6 +30,11 @@ It implements most of the useful features of HP OMEN's official OGH software, **
 - More detailed instructions are available in the "About OSH" right‑click menu.
 - Run `OmenSuperHub清理脚本.bat` to clear all OmenSuperHub configuration.
 
+eGPU notes (this fork)
+=
+- **Laptop GPU stuck at base power (e.g. 115 W instead of 140 W) while an NVIDIA eGPU is attached:** Dynamic Boost goes to the wrong card. This fork fixes it automatically, see [docs/DYNAMIC-BOOST-EGPU.md](docs/DYNAMIC-BOOST-EGPU.md).
+- eGPU fan curve, power limit, clock offsets and the "CUDA - Force P2 State" switch are under Performance → eGPU Power & Clocks.
+
 Links
 =
 - [OmenMon](https://github.com/OmenMon/OmenMon) by **@GeographicCone**

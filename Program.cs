@@ -299,7 +299,10 @@ namespace OmenSuperHub {
         // 立即执行一次
         optimiseSchedule();
         InitEgpuFan();
+        DbFixRecover();
         InitEgpuPower();
+        InitEgpuOc();
+        TryDynamicBoostFix("baslangic", 15000);
 
         // Main loop to query CPU and GPU temperature every second
         fanControlTimer = new System.Threading.Timer((e) => {
@@ -732,6 +735,8 @@ namespace OmenSuperHub {
             // eGPU（重新）出现时重新检测其风扇，例如驱动重启或掉线恢复之后
             if (hasEGPU && !wasEGPU && !egpuFanAvailable) DetectEgpuFan("eGPU algilandi");
             if (hasEGPU && !wasEGPU) CheckEgpuPower("eGPU algilandi");
+            if (hasEGPU && !wasEGPU) TryDynamicBoostFix("eGPU algilandi", 20000);
+            if (hasEGPU && !wasEGPU && egpuOcManaged) CheckEgpuOc("eGPU algilandi");
           } else {
             hasEGPU = false;
           }
@@ -829,6 +834,8 @@ namespace OmenSuperHub {
       CheckConflicts();
       // 用户设定了 eGPU 功率限制时，每 30 秒校验一次（驱动重载/其他软件可能把它改回去）
       if (egpuPowerLimitW > 0 && egpuPowerAvailable) CheckEgpuPower("periyodik");
+      // 同理校验 eGPU 频率偏移（驱动重载/TDR 会清零；TDR 后暂停而不是再次应用）
+      if (egpuOcManaged && !egpuOcPaused && !egpuOcBootSkip && hasEGPU) CheckEgpuOc("periyodik");
       // 内置 GPU 有负载时记录功率上限的变化（确认 Dynamic Boost 是否把上限提到最高）
       if (hasNVIDIAGpu && monitorGPU && rawGotGPU && rawPowerGPU > 30) QueryGpuCeiling("yuk");
 

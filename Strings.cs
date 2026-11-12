@@ -801,7 +801,7 @@
         $"Maksimuma ayarlandı: yük altında GPU tavanı {max} W'a kadar çıkabilir.");
 
     // eGPU 功率限制（nvidia-smi -pl）
-    public static string EgpuPowerMenu => T("eGPU 功率限制", "eGPU 功率限制", "eGPU Power Limit", "eGPU Güç Sınırı");
+    public static string EgpuPowerMenu => T("eGPU 功率与频率", "eGPU 功率與頻率", "eGPU Power & Clocks", "eGPU Güç ve Hız");
     public static string EgpuPowerDefault(int w) => T($"默认 ({w} W)", $"預設 ({w} W)", $"Default ({w} W)", $"Varsayılan ({w} W)");
     public static string EgpuPowerDefaultTip => T("恢复显卡默认功率限制，之后 OSH 不再接管。", "恢復顯示卡預設功率限制，之後 OSH 不再接管。",
         "Restores the card's default limit; OSH stops managing it.", "Kartın varsayılan sınırına döner; OSH artık karışmaz.");
@@ -816,6 +816,43 @@
         $"eGPU 功率限制设置失败：{msg}", $"eGPU 功率限制設定失敗：{msg}", $"eGPU power limit failed: {msg}", $"eGPU güç sınırı uygulanamadı: {msg}");
     public static string EgpuFanApplyFailed(string msg) => T(
         $"eGPU 风扇设置失败：{msg}", $"eGPU 風扇設定失敗：{msg}", $"eGPU fan setting failed: {msg}", $"eGPU fan ayarı uygulanamadı: {msg}");
+
+    // eGPU 超频（NVAPI P0 频率偏移）与 CUDA 强制 P2
+    public static string EgpuOcHeader(int core, int mem) => T(
+        $"超频 (P0)：核心 {core:+0;-0;0} MHz，显存 {mem:+0;-0;0} MHz",
+        $"超頻 (P0)：核心 {core:+0;-0;0} MHz，顯存 {mem:+0;-0;0} MHz",
+        $"Overclock (P0): core {core:+0;-0;0} MHz, memory {mem:+0;-0;0} MHz",
+        $"Hız aşırtma (P0): çekirdek {core:+0;-0;0} MHz, bellek {mem:+0;-0;0} MHz");
+    public static string EgpuOcPausedSuffix => T("（驱动重置后已暂停）", "（驅動重置後已暫停）", " (paused after a driver reset)", " (sürücü sıfırlandı, duraklatıldı)");
+    public static string EgpuOcReset => T("默认频率（不超频）", "預設頻率（不超頻）", "Stock clocks (no overclock)", "Stok saatler (hız aşırtma yok)");
+    public static string EgpuOcResetTip => T("两个偏移归零，之后 OSH 不再接管 eGPU 频率。", "兩個偏移歸零，之後 OSH 不再接管 eGPU 頻率。",
+        "Sets both offsets to 0; OSH stops managing eGPU clocks.", "İki ayarı da 0'a çeker; OSH artık eGPU saatlerine karışmaz.");
+    public static string EgpuOcCoreSlider => T("核心频率偏移 (MHz)", "核心頻率偏移 (MHz)", "Core clock offset (MHz)", "Çekirdek saati (MHz)");
+    public static string EgpuOcMemSlider => T("显存频率偏移 (MHz)", "顯存頻率偏移 (MHz)", "Memory clock offset (MHz)", "Bellek saati (MHz)");
+    public static string EgpuOcCoreValue(int v) => T($"核心：{v:+0;-0;0} MHz", $"核心：{v:+0;-0;0} MHz", $"Core: {v:+0;-0;0} MHz", $"Çekirdek: {v:+0;-0;0} MHz");
+    public static string EgpuOcMemValue(int v) => T($"显存：{v:+0;-0;0} MHz", $"顯存：{v:+0;-0;0} MHz", $"Memory: {v:+0;-0;0} MHz", $"Bellek: {v:+0;-0;0} MHz");
+    public static string EgpuOcApplyFailed(string msg) => T(
+        $"eGPU 超频设置失败：{msg}", $"eGPU 超頻設定失敗：{msg}", $"eGPU overclock failed: {msg}", $"eGPU hız aşırtma uygulanamadı: {msg}");
+    public static string EgpuOcPausedTitle => T("eGPU 超频已暂停", "eGPU 超頻已暫停", "eGPU overclock paused", "eGPU hız aşırtması duraklatıldı");
+    public static string EgpuOcPausedText(int core, int mem) => T(
+        $"显卡驱动刚刚重置，频率偏移（核心 {core:+0;-0;0}，显存 {mem:+0;-0;0} MHz）可能不稳定，已暂停。降低数值后拖动滑块即可重新应用。",
+        $"顯示卡驅動剛剛重置，頻率偏移（核心 {core:+0;-0;0}，顯存 {mem:+0;-0;0} MHz）可能不穩定，已暫停。降低數值後拖曳滑桿即可重新套用。",
+        $"The display driver just reset; the offsets (core {core:+0;-0;0}, memory {mem:+0;-0;0} MHz) may be unstable and were paused. Lower them and move a slider to re-apply.",
+        $"Ekran kartı sürücüsü sıfırlandı; hız aşırtma (çekirdek {core:+0;-0;0}, bellek {mem:+0;-0;0} MHz) kararsız olabilir, duraklatıldı. Değeri düşürüp kaydırıcıyı oynatınca yeniden uygulanır.");
+    public static string CudaP2Item => T("CUDA 不强制 P2（计算时显存全速）", "CUDA 不強制 P2（計算時顯存全速）",
+        "Don't force P2 for CUDA (full VRAM clock)", "CUDA P2 kilidini kaldır (LLM/CUDA'da tam VRAM hızı)");
+    public static string CudaP2Tip => T(
+        "NVIDIA 驱动默认让 CUDA 程序（如 LM Studio）运行在 P2：显存频率低一档，显存超频也不生效。勾选后改为 P0。对正在运行的程序，需重新加载模型或重启程序后生效。",
+        "NVIDIA 驅動預設讓 CUDA 程式（如 LM Studio）執行在 P2：顯存頻率低一檔，顯存超頻也不生效。勾選後改為 P0。對正在執行的程式，需重新載入模型或重新啟動程式後生效。",
+        "By default the NVIDIA driver runs CUDA apps (e.g. LM Studio) in P2: lower VRAM clock and no memory overclock. Checked = they run in P0. Running apps need a model reload / restart.",
+        "NVIDIA sürücüsü CUDA programlarını (ör. LM Studio) varsayılan olarak P2'de çalıştırır: VRAM bir kademe yavaş ve bellek hız aşırtması işlemez. İşaretliyse P0'da çalışırlar. Açık programda modeli yeniden yükleyince geçerli olur.");
+    public static string CudaP2Applied(bool off) => off
+        ? T("已关闭 CUDA 强制 P2。重新加载模型（或重启程序）后生效。", "已關閉 CUDA 強制 P2。重新載入模型（或重新啟動程式）後生效。",
+            "CUDA P2 lock removed. Reload the model (or restart the app) for it to take effect.",
+            "CUDA P2 kilidi kaldırıldı. Geçerli olması için LM Studio'da modeli yeniden yükle.")
+        : T("已恢复驱动默认（CUDA 强制 P2）。", "已恢復驅動預設（CUDA 強制 P2）。", "Driver default restored (CUDA forced to P2).", "Sürücü varsayılanına dönüldü (CUDA P2'de).");
+    public static string CudaP2Failed(string msg) => T(
+        $"CUDA P2 设置失败：{msg}", $"CUDA P2 設定失敗：{msg}", $"CUDA P2 setting failed: {msg}", $"CUDA P2 ayarı uygulanamadı: {msg}");
 
     // ─────────────────────────────────────────────────────────────────────────
     // 错误/警告对话框

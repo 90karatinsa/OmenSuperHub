@@ -174,9 +174,12 @@ namespace OmenSuperHub {
       };
       egpuPowerMenu.DropDownItems.Add(egpuPowerTrackBar);
       egpuPowerMenu.DropDownItems.Add(egpuPowerValueLabel);
+      // 同一子菜单里放 eGPU 超频（核心/显存偏移）和 CUDA 强制 P2 开关
+      AddEgpuOcItems(egpuPowerMenu);
       egpuPowerMenu.DropDownOpening += (s, e) => {
         RefreshEgpuPowerStatus();
         CheckEgpuPower("menu");
+        CheckEgpuOc("menu");
       };
       return egpuPowerMenu;
     }
