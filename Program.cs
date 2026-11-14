@@ -836,6 +836,8 @@ namespace OmenSuperHub {
       if (egpuPowerLimitW > 0 && egpuPowerAvailable) CheckEgpuPower("periyodik");
       // 同理校验 eGPU 频率偏移（驱动重载/TDR 会清零；TDR 后暂停而不是再次应用）
       if (egpuOcManaged && !egpuOcPaused && !egpuOcBootSkip && hasEGPU) CheckEgpuOc("periyodik");
+      // 内置独显的偏移同样会被 TDR 清零：重新应用，短时间内重复则暂停
+      if (hasNVIDIAGpu) CheckInternalGpuOc();
       // 内置 GPU 有负载时记录功率上限的变化（确认 Dynamic Boost 是否把上限提到最高）
       if (hasNVIDIAGpu && monitorGPU && rawGotGPU && rawPowerGPU > 30) QueryGpuCeiling("yuk");
 

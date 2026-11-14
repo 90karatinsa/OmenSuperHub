@@ -314,6 +314,7 @@
     <Compile Include="Program.EgpuPower.cs" />
     <Compile Include="Program.EgpuOc.cs" />
     <Compile Include="Program.DynamicBoostFix.cs" />
+    <Compile Include="Program.GpuOcGuard.cs" />
     <Compile Include="Program.GpuMaxPower.cs" />
     <Compile Include="Program.FanCurveSimple.cs" />
     <Compile Include="Properties\AssemblyVersion.cs" />
